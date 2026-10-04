@@ -1,0 +1,77 @@
+name: Signal Monitor - Every 15 Minutes
+
+# PROTOCOLO §7 pide captura cada 15 min, 24/7 (Telegram no duerme). Los scripts 2 y 3 se
+# saltan solos fuera del horario NYSE, asi que esas corridas son cortas. Ojo con los minutos:
+# ~2,900 corridas/mes; un repo publico es gratis, uno privado gasta cuota (2,000 min gratis).
+# Si prefieres solo horario de mercado: cron '*/15 13-21 * * 1-5' (cubre EDT y EST).
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: signal-monitor
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # Cada paso corre aunque el anterior falle (un script caido no detiene el pipeline);
+      # el job igual se marca en rojo para que lo notes.
+      - name: 1 - Parse Telegram signals
+        if: ${{ !cancelled() }}
+        env:
+          TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
+          TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
+          TELEGRAM_SESSION: ${{ secrets.TELEGRAM_SESSION }}
+        run: python scripts/1_parser_signals.py
+
+      - name: 2 - Gravity Zone alerts
+        if: ${{ !cancelled() }}
+        run: python scripts/2_gravity_alerts.py
+
+      - name: 3 - Fetch prices
+        if: ${{ !cancelled() }}
+        run: python scripts/3_fetch_prices.py
+
+      - name: 4 - Calculate returns
+        if: ${{ !cancelled() }}
+        run: python scripts/4_calculate_returns.py
+
+      - name: 5 - Generate reports
+        if: ${{ !cancelled() }}
+        env:
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          ALERT_EMAIL_TO: ${{ secrets.ALERT_EMAIL_TO }}
+        run: python scripts/5_generate_reports.py
+
+      - name: Commit & push changes
+        if: ${{ !cancelled() }}
+        run: |
+          git config user.email "signal-bot@${GITHUB_SERVER_URL##*/}.invalid"
+          git config user.name "Signal Bot"
+          git add data reports
+          if git diff --cached --quiet; then
+            echo "Sin cambios que guardar"
+          else
+            git commit -m "Auto: captura de señales $(date -u +'%Y-%m-%d %H:%M') UTC"
+            git pull --rebase --autostash
+            git push
+          fi
