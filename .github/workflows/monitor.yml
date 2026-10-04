@@ -6,7 +6,7 @@ name: Signal Monitor - Every 15 Minutes
 # Si prefieres solo horario de mercado: cron '*/15 13-21 * * 1-5' (cubre EDT y EST).
 on:
   schedule:
-    - cron: '*/15 * * * *'
+    - cron: '*/15 13-21 * * 1-5'
   workflow_dispatch:
 
 permissions:
