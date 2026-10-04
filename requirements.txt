@@ -1,0 +1,10 @@
+# Dependencias del pipeline. Versiones fijadas para que una corrida de hoy se
+# comporte igual que una de hace un mes.
+#
+# Ojo con yfinance: lee datos de Yahoo por scraping, asi que cuando Yahoo cambia
+# sus endpoints las versiones viejas dejan de traer precios y hay que subir el pin
+# (los scripts 2 y 3 empezarian a registrar fallos en data/log.txt).
+
+yfinance==1.7.0        # precios diarios (scripts 2 y 3, via common_utils)
+telethon==1.45.0       # lectura del canal de Telegram (scripts 0 y 1)
+python-dotenv==1.2.4   # .env en local; en Actions se usan Secrets (import opcional)
