@@ -1,0 +1,16 @@
+# Bytecode de Python (se regenera solo al importar los scripts)
+__pycache__/
+*.py[cod]
+
+# Entornos virtuales locales
+.venv/
+venv/
+
+# Credenciales: TELEGRAM_API_ID/HASH/SESSION y SMTP_*. En Actions van como
+# Secrets; en local, en un .env que NUNCA debe llegar al repo.
+.env
+
+# Escrituras atomicas a medio camino (common_utils.save_csv / save_state).
+# Los archivos definitivos de data/ y reports/ SI se versionan: el workflow
+# hace `git add data reports` en cada corrida.
+*.tmp
