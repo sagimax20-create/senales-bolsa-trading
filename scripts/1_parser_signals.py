@@ -25,17 +25,21 @@ DIRECTION_RE = re.compile(r"\b(CALLS?|PUTS?)\b")
 PRICE_RE = re.compile(r"(?:@|\bPRIMA\b|\bPREMIUM\b)\s*:?\s*\$?\s*(\d+(?:\.\d+)?)")
 
 
-def parse_message(text: str, tickers: list[str]) -> list[dict]:
+def parse_message(text: str, tickers: list[str] = None) -> list[dict]:
     """Devuelve [{ticker, signal_type, price_recommended}] de un mensaje.
 
     Se analiza linea por linea: una linea con ticker + CALL/PUT es una señal. Si la
     linea trae ticker pero no direccion, hereda la del mensaje solo si el mensaje tiene
     UNA sola direccion (si trae CALL y PUT mezclados, es ambiguo y se descarta).
+
+    Nota: tickers es ignorado para captura inicial; se capturan TODOS los tickers
+    emitidos por el canal de Vicente Luz.
     """
     if not text:
         return []
     upper = text.upper()
-    ticker_re = re.compile(r"(?<![A-Z0-9])\$?(" + "|".join(map(re.escape, tickers)) + r")(?![A-Z0-9])")
+    # Captura cualquier símbolo de ticker (2-5 letras mayúsculas, precedidas o no de $)
+    ticker_re = re.compile(r"(?<![A-Z0-9])\$?([A-Z]{2,5})(?![A-Z0-9])")
     msg_dirs = {m.group(1).rstrip("S") for m in DIRECTION_RE.finditer(upper)}
     found: dict[tuple[str, str], str] = {}
     for line in upper.splitlines():
@@ -91,7 +95,7 @@ async def run() -> int:
             ts = msg.date.astimezone(timezone.utc)
             if ts < start:
                 continue  # el testeo empieza en capture_start; el historial previo no cuenta
-            for s in parse_message(msg.message or "", tickers):
+            for s in parse_message(msg.message or ""):
                 key = (str(msg.id), s["ticker"], s["signal_type"])
                 if key in existing:
                     continue
