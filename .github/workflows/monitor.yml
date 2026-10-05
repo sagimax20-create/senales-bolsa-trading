@@ -6,6 +6,10 @@ name: Signal Monitor - Every 15 Minutes
 # Si prefieres solo horario de mercado: cron '*/15 13-21 * * 1-5' (cubre EDT y EST).
 on:
   schedule:
+    # Rango seguro que cubre ambos EDT (1:30-8:00 PM UTC) y EST (2:30-9:00 PM UTC)
+    # EDT: 9:30 AM - 4:00 PM EDT = 1:30 PM - 8:00 PM UTC
+    # EST: 9:30 AM - 4:00 PM EST = 2:30 PM - 9:00 PM UTC
+    # Cron: cada 15 minutos, horas 13-21 UTC, lunes-viernes
     - cron: '*/15 13-21 * * 1-5'
   workflow_dispatch:
 
@@ -31,8 +35,14 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      # Validación automática de horario de mercado NYSE
+      - name: 0 - Check market hours (EDT/EST auto-detect)
+        run: python scripts/0_check_market_hours.py
+
       # Cada paso corre aunque el anterior falle (un script caido no detiene el pipeline);
       # el job igual se marca en rojo para que lo notes.
+      # El step de market hours actúa como gate: si la bolsa está cerrada,
+      # los siguientes steps no procesarán datos (continue-on-error permite que el job no falle)
       - name: 1 - Parse Telegram signals
         if: ${{ !cancelled() }}
         env:
