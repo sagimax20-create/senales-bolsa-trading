@@ -1,0 +1,61 @@
+name: Monthly Report - Last Day of Month at 4 PM ET
+
+# Ejecuta el último día de cada mes a las 4:00 PM ET
+# Se ejecuta entre 28-31 (cubre todos los meses), pero el script verifica si es el último día
+on:
+  schedule:
+    # Últimos días de cada mes a las 8:20 PM UTC (4 PM ET)
+    - cron: '20 21 28-31 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  monthly_report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Check if last day of month
+        id: check_last_day
+        run: |
+          from datetime import datetime, timedelta
+          today = datetime.utcnow().date()
+          tomorrow = today + timedelta(days=1)
+          is_last_day = today.month != tomorrow.month
+          print(f"Is last day of month: {is_last_day}")
+          print(f"LAST_DAY={is_last_day}" >> $GITHUB_OUTPUT)
+        shell: python
+
+      - name: Generate Monthly Report
+        if: ${{ steps.check_last_day.outputs.LAST_DAY == 'True' }}
+        env:
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          ALERT_EMAIL_TO: ${{ secrets.ALERT_EMAIL_TO }}
+        run: python scripts/7_generate_monthly_report.py
+
+      - name: Commit & push changes
+        if: ${{ steps.check_last_day.outputs.LAST_DAY == 'True' }}
+        run: |
+          git config user.email "signal-bot@${GITHUB_SERVER_URL##*/}.invalid"
+          git config user.name "Signal Bot"
+          git add reports data
+          if git diff --cached --quiet; then
+            echo "Sin cambios que guardar"
+          else
+            git commit -m "Auto: reporte mensual $(date -u +'%Y-%m-%d %H:%M') UTC"
+            git pull --rebase --autostash
+            git push
+          fi
