@@ -1,4 +1,1 @@
 timestamp,ticker,signal_type,option_type,strike_type,price_recommended,channel,message_id
-2026-10-05 13:41:34,COIN,CALL,OTM,95%,,VICENTE_LUZ,72873
-2026-10-05 13:41:34,CALL,CALL,OTM,95%,,VICENTE_LUZ,72873
-2026-10-05 13:41:34,OCT,CALL,OTM,95%,,VICENTE_LUZ,72873
