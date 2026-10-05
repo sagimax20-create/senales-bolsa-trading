@@ -23,6 +23,8 @@ from common_utils import (SIGNALS_COLS, SIGNALS_CSV, append_csv, fmt_ts, get_con
 CHANNEL_TAG = "VICENTE_LUZ"
 DIRECTION_RE = re.compile(r"\b(CALLS?|PUTS?)\b")
 PRICE_RE = re.compile(r"(?:@|\bPRIMA\b|\bPREMIUM\b)\s*:?\s*\$?\s*(\d+(?:\.\d+)?)")
+# Palabras que NO son tickers pero pueden verse como secuencias de letras
+EXCLUDED_WORDS = {"CALL", "PUT", "CALLS", "PUTS", "OCT", "OTM", "ITM", "ATM", "BOLSA", "OPCIONES", "SEÑAL", "STRIKE", "SPREAD"}
 
 
 def parse_message(text: str, tickers: list[str] = None) -> list[dict]:
@@ -43,7 +45,7 @@ def parse_message(text: str, tickers: list[str] = None) -> list[dict]:
     msg_dirs = {m.group(1).rstrip("S") for m in DIRECTION_RE.finditer(upper)}
     found: dict[tuple[str, str], str] = {}
     for line in upper.splitlines():
-        line_tickers = list(dict.fromkeys(m.group(1) for m in ticker_re.finditer(line)))
+        line_tickers = [t for t in dict.fromkeys(m.group(1) for m in ticker_re.finditer(line)) if t not in EXCLUDED_WORDS]
         if not line_tickers:
             continue
         line_dirs = {m.group(1).rstrip("S") for m in DIRECTION_RE.finditer(line)}
