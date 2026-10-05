@@ -1,0 +1,1 @@
+id,timestamp_entry,ticker,option_type,strike_usd,price_entry,price_exit,reason_exit,days_held,retorno_bruto_pct,comision_pct,retorno_neto_pct,estado,channel,signal_timestamp,spot_entry,iv_entry,expiry,timestamp_exit,peak_return_pct,trough_return_pct,signal_key
