@@ -14,4 +14,4 @@ _Actualizado: 2026-10-06 UTC · generado por scripts/5_generate_reports.py_
 - Retorno neto con costo bancario (criterio del protocolo): n/d
 - Acción: Si el retorno neto < 10% se descarta.
 
-Operaciones: 0 cerradas · 0 abiertas · 4 pendientes.
+Operaciones: 0 cerradas · 4 abiertas · 0 pendientes.
