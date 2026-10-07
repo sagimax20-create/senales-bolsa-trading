@@ -1,6 +1,6 @@
 # Hitos de Decisión
 
-_Actualizado: 2026-10-06 UTC · generado por scripts/5_generate_reports.py_
+_Actualizado: 2026-10-07 UTC · generado por scripts/5_generate_reports.py_
 
 ## Alarma (100 señales)
 - Estado: EN PROGRESO (4/100)
