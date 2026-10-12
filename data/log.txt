@@ -98,3 +98,10 @@
 2026-10-09 22:53:15,732 [INFO] Script 5: escritos ['hitos.md']; 7 señales, 4 cerradas
 2026-10-10 00:03:36,587 [INFO] Script 6: Reporte semanal enviado a sagimax20@gmail.com
 2026-10-10 00:03:36,588 [INFO] Script 6: Reporte semanal generado (353 señales)
+2026-10-12 21:26:02,718 [WARNING] No pude resolver 'alertas_bolsa_vicente_luz' (No user has "alertas_bolsa_vicente_luz" as username); busco por titulo en tus dialogos
+2026-10-12 21:26:03,155 [INFO] Canal encontrado por titulo: Alertas de Bolsa de Valores Vicente Luz
+2026-10-12 21:26:03,357 [INFO] Script 1: 108 señales nuevas (ultimo mensaje leido: 73109)
+2026-10-12 21:26:03,482 [INFO] Script 2: mercado cerrado; sin alertas
+2026-10-12 21:26:03,574 [INFO] Script 3: mercado cerrado; sin captura
+2026-10-12 21:26:03,670 [INFO] Script 4: +3 operaciones, 0 entradas, 0 cierres nuevos; total 10 {'open': 3, 'closed': 4, 'pending': 3}
+2026-10-12 21:26:03,767 [INFO] Script 5: escritos ['hitos.md', 'report_weekly.html']; 10 señales, 4 cerradas
