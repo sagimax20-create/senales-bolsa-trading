@@ -10,7 +10,7 @@ _Actualizado: 2026-10-16 UTC · generado por scripts/5_generate_reports.py_
 
 ## Decisión Final (300 señales)
 - Estado: PENDIENTE (15/300)
-- Fecha estimada: 2027-05-14 (proyeccion)
+- Fecha estimada: 2027-05-16 (proyeccion)
 - Retorno neto con costo bancario (criterio del protocolo): -37.5%
 - Acción: Si el retorno neto < 10% se descarta.
 
