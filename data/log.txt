@@ -241,3 +241,10 @@
 2026-10-21 20:53:55,195 [INFO] Script 3: mercado cerrado; sin captura
 2026-10-21 20:53:55,266 [INFO] Script 4: +2 operaciones, 0 entradas, 0 cierres nuevos; total 23 {'closed': 12, 'open': 9, 'pending': 2}
 2026-10-21 20:53:55,336 [INFO] Script 5: escritos ['hitos.md']; 23 señales, 12 cerradas
+2026-10-21 23:45:26,580 [WARNING] No pude resolver 'alertas_bolsa_vicente_luz' (No user has "alertas_bolsa_vicente_luz" as username); busco por titulo en tus dialogos
+2026-10-21 23:45:26,750 [INFO] Canal encontrado por titulo: Alertas de Bolsa de Valores Vicente Luz
+2026-10-21 23:45:26,828 [INFO] Script 1: 0 señales nuevas (ultimo mensaje leido: 73466)
+2026-10-21 23:45:26,950 [INFO] Script 2: mercado cerrado; sin alertas
+2026-10-21 23:45:27,037 [INFO] Script 3: mercado cerrado; sin captura
+2026-10-21 23:45:27,130 [INFO] Script 4: +0 operaciones, 0 entradas, 0 cierres nuevos; total 23 {'closed': 12, 'open': 9, 'pending': 2}
+2026-10-21 23:45:27,221 [INFO] Script 5: escritos ['hitos.md']; 23 señales, 12 cerradas
