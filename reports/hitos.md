@@ -1,17 +1,17 @@
 # Hitos de Decisión
 
-_Actualizado: 2026-10-21 UTC · generado por scripts/5_generate_reports.py_
+_Actualizado: 2026-10-22 UTC · generado por scripts/5_generate_reports.py_
 
 ## Alarma (100 señales)
-- Estado: EN PROGRESO (23/100)
+- Estado: EN PROGRESO (24/100)
 - Fecha estimada: 2026-12-15 (proyeccion)
-- Retorno neto sin costo bancario: -21.6%
+- Retorno neto sin costo bancario: -37.7%
 - Acción: Seguir capturando.
 
 ## Decisión Final (300 señales)
-- Estado: PENDIENTE (23/300)
-- Fecha estimada: 2027-05-04 (proyeccion)
-- Retorno neto con costo bancario (criterio del protocolo): -37.5%
+- Estado: PENDIENTE (24/300)
+- Fecha estimada: 2027-05-05 (proyeccion)
+- Retorno neto con costo bancario (criterio del protocolo): -51.9%
 - Acción: Si el retorno neto < 10% se descarta.
 
-Operaciones: 12 cerradas · 9 abiertas · 2 pendientes.
+Operaciones: 18 cerradas · 6 abiertas · 0 pendientes.
