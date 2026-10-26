@@ -1,2 +1,3 @@
 timestamp,ticker,signal_type,gz_level,price_spot,channel
 2026-10-22 17:41:00,GLD,CALL,-2.25,370.55,GRAVITY_ZONE
+2026-10-26 18:54:26,GLD,CALL,-2.08,367.78,GRAVITY_ZONE
