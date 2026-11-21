@@ -550,3 +550,5 @@
 2026-11-20 20:48:46,359 [INFO] Script 3: 8 precios guardados; fallidos: ninguno
 2026-11-20 20:48:46,530 [INFO] Script 4: +0 operaciones, 1 entradas, 2 cierres nuevos; total 37 {'closed': 36, 'open': 1}
 2026-11-20 20:48:46,623 [INFO] Script 5: escritos ['hitos.md']; 37 señales, 36 cerradas
+2026-11-21 01:32:09,073 [INFO] Script 6: Reporte semanal enviado a sagimax20@gmail.com
+2026-11-21 01:32:09,073 [INFO] Script 6: Reporte semanal generado (198 señales)
