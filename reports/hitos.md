@@ -1,6 +1,6 @@
 # Hitos de Decisión
 
-_Actualizado: 2026-11-20 UTC · generado por scripts/5_generate_reports.py_
+_Actualizado: 2026-11-21 UTC · generado por scripts/5_generate_reports.py_
 
 ## Alarma (100 señales)
 - Estado: EN PROGRESO (37/100)
@@ -10,7 +10,7 @@ _Actualizado: 2026-11-20 UTC · generado por scripts/5_generate_reports.py_
 
 ## Decisión Final (300 señales)
 - Estado: PENDIENTE (37/300)
-- Fecha estimada: 2027-10-14 (proyeccion)
+- Fecha estimada: 2027-10-15 (proyeccion)
 - Retorno neto con costo bancario (criterio del protocolo): -53.8%
 - Acción: Si el retorno neto < 10% se descarta.
 
