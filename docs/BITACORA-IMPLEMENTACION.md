@@ -2,6 +2,21 @@
 
 Esta bitácora registra las correcciones al código que implementa el protocolo y las interpretaciones de lo que el protocolo no define. `PROTOCOLO.md` no cambia; su huella SHA-256 está en [`PROTOCOLO.sha256`](../PROTOCOLO.sha256). Los cambios al protocolo mismo van en adendas: [`ADENDA-01-UNIVERSO.md`](ADENDA-01-UNIVERSO.md).
 
+## 2026-11-24 — Parser v4 (mensajes reales del canal)
+
+El responsable del protocolo copió 11 mensajes reales. El parser v3 acertó en 7 y falló en 4. Cada fallo reveló un formato real del canal:
+
+| Mensaje real | Error en v3 | Corrección (v4) |
+|---|---|---|
+| "October 16 CVX $215 calls" | No encontró el ticker porque está entre la fecha y el strike | Se busca el ticker también dentro del contrato. |
+| "$NVDA buy 23 OCT $225 Call" | Vencimiento 2026-10 en vez de 2026-10-23 | El día antes del mes ("23 OCT", "9 NOV 2026") cuenta como día. |
+| "Buy to Open: 23 OCT 26 28920 NDX Put / Sell to Open: 23 OCT 26 28930 NDX Put" (mensaje "Bullish") | Se registró PUT; "26" se leyó como día; no tomó el strike | Año de 2 dígitos tras "día MES"; strike antes del ticker ("28920 NDX Put"). **Spreads:** si el mensaje compra y vende el mismo tipo del mismo ticker, es una señal con la dirección del spread. Comprar el strike menor y vender el mayor es alcista (CALL); al revés, bajista (PUT). Este spread de crédito con puts es CALL. La pierna vendida queda `pierna_de_spread`; una venta sola, `venta_de_opciones` (el protocolo solo compra). |
+| "BUY XSP … $727 Call / … / BUY SPX … $7270 Call" (24 Hour Payout Plan) | Dos señales | XSP y SPX son el mismo índice (XSP = SPX/10): en el mismo mensaje y con la misma dirección cuentan una vez (`mismo_subyacente`). |
+
+Las líneas de alerta reales quedaron como pruebas en `tests/fixtures/mensajes_reales.json`. Nueva columna en `signals.csv`: `spread`.
+
+Efecto esperado en los datos: la señal NDX del 23-oct pasa de PUT a CALL, CVX del 7-oct entra como señal, y los vencimientos con "día MES" quedan completos. La próxima corrida reprocesa todo, porque `parser_version` pasa a 4.
+
 ## 2026-11-24 — Precios para tickers nuevos fuera de horario
 
 Con la bolsa cerrada, el script 3 solo descarga cada 4 horas. En la corrida del parser v3 (04:45 UTC) eso dejó 38 de 150 operaciones sin precio: 25 tickers nuevos (FCX, NVDL, TTWO, DIA…) sin ninguna vela. Ahora, durante esa pausa, igual se descargan los tickers que aún no tienen velas; el resto sigue esperando.
