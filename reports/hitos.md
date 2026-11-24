@@ -2,18 +2,12 @@
 
 _Actualizado: 2026-11-24 UTC · generado por scripts/5_generate_reports.py · hitos por canal (PROTOCOLO §5); universo de Vicente Luz según docs/ADENDA-01-UNIVERSO.md_
 
+_Gravity Zone suspendido desde el 2026-11-24 (docs/ADENDA-02-GRAVITY.md): solo se testea Vicente Luz._
+
 ## Vicente Luz
 - Señales válidas: 153
 - Alarma (100): ALCANZADA (153/100) · fecha estimada: alcanzado
-  - Retorno neto sin costo bancario: -15.4% · Acción: REVISAR PROTOCOLO: retorno sin costo bancario < 5%.
-- Decisión final (300): PENDIENTE (153/300) · fecha estimada: 2027-01-11 (proyección al ritmo actual: 21.4 por semana)
-  - Retorno neto con costo bancario (criterio §6): -30.0% · Acción: Si el retorno neto con costo bancario es < 10%, se rechaza.
+  - Retorno neto sin costo bancario: -14.7% · Acción: REVISAR PROTOCOLO: retorno sin costo bancario < 5%.
+- Decisión final (300): PENDIENTE (153/300) · fecha estimada: 2027-01-12 (proyección al ritmo actual: 21.3 por semana)
+  - Retorno neto con costo bancario (criterio §6): -29.4% · Acción: Si el retorno neto con costo bancario es < 10%, se rechaza.
 - Operaciones: 141 cerradas · 12 abiertas · 0 pendientes · 0 sin precio
-
-## Gravity Zone
-- Señales válidas: 3
-- Alarma (100): EN PROGRESO (3/100) · fecha estimada: sin dato (pocas señales para proyectar)
-  - Retorno neto sin costo bancario: -51.5% · Acción: Seguir capturando.
-- Decisión final (300): PENDIENTE (3/300) · fecha estimada: sin dato (pocas señales para proyectar)
-  - Retorno neto con costo bancario (criterio §6): -59.8% · Acción: Si el retorno neto con costo bancario es < 10%, se rechaza.
-- Operaciones: 3 cerradas · 0 abiertas · 0 pendientes · 0 sin precio
