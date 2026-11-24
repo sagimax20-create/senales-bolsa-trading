@@ -27,7 +27,7 @@ from common_utils import (BAR_COLS, DAILY_COLS, DAILY_DIR, GRAVITY_COLS, GRAVITY
                           OPERATIONS_CSV, OPS_COLS, PRICES_DIR, SIGNALS_COLS, SIGNALS_CSV, fmt_ts,
                           get_config, is_trading_day, load_csv, load_state, log_event, market_open,
                           now_utc, parse_ts, save_csv, ticker_file, to_float, update_state, yahoo_symbol)
-from ops_engine import build_candidates  # noqa: E402
+from ops_engine import OPS_VERSION, build_candidates  # noqa: E402
 from signal_parser import PARSER_VERSION  # noqa: E402
 
 STEP = {"15m": timedelta(minutes=15), "60m": timedelta(minutes=60)}
@@ -185,7 +185,7 @@ def main() -> int:
         return 0
     signals = load_csv(SIGNALS_CSV, SIGNALS_COLS)
     gravity = load_csv(GRAVITY_CSV, GRAVITY_COLS)
-    ops = load_csv(OPERATIONS_CSV, OPS_COLS) if state.get("ops_version") == 2 else []
+    ops = load_csv(OPERATIONS_CSV, OPS_COLS) if state.get("ops_version") == OPS_VERSION else []
     needed = needed_tickers(signals, gravity, cfg, now, ops)
     tickers, mode = select_tickers(needed, now, state.get("prices_last_fetch"), cfg, "--force" in sys.argv,
                                    lambda t: (PRICES_DIR / ticker_file(t)).exists())

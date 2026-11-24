@@ -2,6 +2,30 @@
 
 Esta bitácora registra las correcciones al código que implementa el protocolo y las interpretaciones de lo que el protocolo no define. `PROTOCOLO.md` no cambia; su huella SHA-256 está en [`PROTOCOLO.sha256`](../PROTOCOLO.sha256). Los cambios al protocolo mismo van en adendas: [`ADENDA-01-UNIVERSO.md`](ADENDA-01-UNIVERSO.md).
 
+## 2026-11-24 — Niveles de ganancia +25/+50/+75/+100% y avisos por Telegram
+
+Pedido del responsable del protocolo: saber si se ganó llegando al strike o cerca de él. Es **análisis** (§10 nota 2) y no cambia la regla oficial (cierre en +50%).
+
+- **Motor de operaciones (`OPS_VERSION` 3).** Para cada operación guarda:
+  - el primer momento en que la prima llega a +25%, +50%, +75% y +100% (`nivel_*_ts`);
+  - el precio del subyacente en ese momento (`nivel_*_spot`);
+  - el precio más favorable del subyacente en 45 días (`spot_favorable_45d`);
+  - el strike publicado por Vicente (`strike_vl`).
+
+  La primera corrida respalda `operations.csv` (v2) y lo reconstruye. Las 3 operaciones históricas de Gravity Zone se conservan.
+- **Reportes semanal y mensual.** Nueva sección "Niveles de ganancia" con:
+  - los niveles alcanzados en el período, con la distancia al strike del protocolo y al de Vicente;
+  - un resumen acumulado por nivel: cuántas operaciones llegaron y si fue pasando el strike, cerca (a menos de `strike_near_pct` = 2%) o lejos.
+- **Bot de Telegram (`scripts/8_notify_telegram.py`).** Avisa cada nivel nuevo. Requiere `TELEGRAM_BOT_TOKEN` y `TELEGRAM_CHAT_ID`; sin ellos no hace nada. La primera vez no manda el histórico.
+
+Con los datos al 24-nov (153 operaciones con entrada), la prima llegó a:
+
+| Nivel | Operaciones | Precio del subyacente frente al strike del protocolo (mediana) |
+|---|---|---|
+| +25% | 96 | −2.1% |
+| +50% | 64 (53 por la regla oficial y 11 después de un stop-loss, en sombra) | −0.6% |
+| +100% | 40 | +1.9% |
+
 ## 2026-11-24 — Gravity Zone suspendido (adenda 02)
 
 Por decisión del responsable del protocolo ([`ADENDA-02-GRAVITY.md`](ADENDA-02-GRAVITY.md)), solo se testea Vicente Luz:

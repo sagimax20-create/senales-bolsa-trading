@@ -15,6 +15,7 @@ M7 = load_script("7_generate_monthly_report")
 P3 = load_script("3_fetch_prices")
 S0 = load_script("0_update_symbols")
 G2 = load_script("2_gravity_alerts")
+N8 = load_script("8_notify_telegram")
 
 
 def op(i, ts_entry, ts_exit, reason, net, channel="VICENTE_LUZ", estado="closed", original="0", ticker="NVDA"):
@@ -265,6 +266,76 @@ class GravitySuspendedTest(unittest.TestCase):
         from report_lib import channels
         self.assertEqual([c for c, _ in channels(CFG)], ["VICENTE_LUZ", "GRAVITY_ZONE"])
         self.assertEqual([c for c, _ in channels(self.OFF)], ["VICENTE_LUZ"])
+
+
+class ProfitLevelsReportTest(unittest.TestCase):
+    def test_strike_distance(self):
+        from report_lib import distance_label, strike_distance
+        self.assertAlmostEqual(strike_distance("CALL", 106, 105), 100 / 105, places=6)   # ya paso el strike
+        self.assertAlmostEqual(strike_distance("CALL", 103, 105), -200 / 105, places=6)  # le falto 1.9%
+        self.assertAlmostEqual(strike_distance("PUT", 94, 95), 100 / 95, places=6)
+        self.assertIsNone(strike_distance("CALL", 100, ""))
+        self.assertEqual(distance_label(0.5, 2), "pasó el strike")
+        self.assertEqual(distance_label(-1.0, 2), "a menos de 2% del strike")
+        self.assertEqual(distance_label(-3.0, 2), "a más de 2% del strike")
+
+    def leveled(self):
+        d = sample_data()
+        o = d["ops"][0]   # take-profit el 5-nov
+        o.update({"strike_usd": "105", "strike_vl": "110", "nivel_25_ts": "2026-11-04 15:00:00", "nivel_25_spot": "103",
+                  "nivel_50_ts": "2026-11-05 15:00:00", "nivel_50_spot": "106", "nivel_75_ts": "2026-11-24 15:00:00",
+                  "nivel_75_spot": "108", "nivel_100_ts": "", "nivel_100_spot": ""})
+        return d
+
+    def test_events_and_status(self):
+        from report_lib import level_events
+        evs = level_events(self.leveled()["ops"])
+        got = {e["nivel"]: e["estado"] for e in evs if e["op"]["id"] == "1"}
+        self.assertEqual(got[25], "antes del cierre")
+        self.assertEqual(got[50], "cierre oficial por take-profit (+50%)")
+        self.assertTrue(got[75].startswith("en sombra"))
+        self.assertNotIn(100, got)
+
+    def test_weekly_section(self):
+        now = datetime(2026, 11, 30, 13, 23, tzinfo=timezone.utc)
+        html, _ = W6.build_weekly(self.leveled(), CFG, now, date(2026, 11, 23), date(2026, 11, 30))
+        self.assertIn("Niveles de ganancia: +25%, +50%, +75% y +100%", html)
+        self.assertIn("Niveles alcanzados esta semana", html)
+        self.assertIn("+75%", html)
+        self.assertIn("Strike de Vicente: pasó / cerca / lejos", html)
+
+
+class TelegramNotifyTest(unittest.TestCase):
+    def events(self):
+        from report_lib import level_events
+        return level_events(ProfitLevelsReportTest().leveled()["ops"])
+
+    def test_message_has_level_spot_and_strike_distances(self):
+        e = [x for x in self.events() if x["nivel"] == 50][0]
+        msg = N8.format_event(e, 2)
+        self.assertIn("NVDA CALL llegó a +50%", msg)
+        self.assertIn("Precio del subyacente: $106.00", msg)
+        self.assertIn("Strike del protocolo $105.00: +1.0% → pasó el strike", msg)
+        self.assertIn("Strike de Vicente $110.00: -3.6% → a más de 2% del strike", msg)
+        self.assertIn("cierre oficial por take-profit", msg)
+
+    def test_first_activation_does_not_send_history(self):
+        self.assertEqual(N8.plan(self.events(), None), ("init", []))
+
+    def test_only_new_levels_are_sent(self):
+        evs = self.events()
+        done = [N8.event_key(e) for e in evs if e["nivel"] != 75]
+        mode, new = N8.plan(evs, done)
+        self.assertEqual((mode, [e["nivel"] for e in new]), ("cada_uno", [75]))
+        self.assertEqual(N8.plan(evs, [N8.event_key(e) for e in evs]), ("nada", []))
+
+    def test_many_new_levels_become_one_summary(self):
+        evs = self.events() * 10   # mas de MAX_EACH
+        self.assertEqual(N8.plan(evs, [])[0], "resumen")
+
+    def test_pack_respects_telegram_limit(self):
+        groups = N8.pack(["x" * 1500] * 5, limit=3800)
+        self.assertEqual(groups, [[0, 1], [2, 3], [4]])
 
 
 class SymbolsTest(unittest.TestCase):

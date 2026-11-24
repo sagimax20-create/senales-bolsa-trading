@@ -18,6 +18,9 @@ Comision (PROTOCOLO §4): 1% del capital al entrar + 1% del valor al salir.
 Sombra (PROTOCOLO §10 nota 2): la operacion se sigue hasta el dia 45 aunque haya cerrado, para
 saber si habria tocado +100%, +150% o +200% y cuanto valia al vencimiento sin reglas. No
 cambia el resultado oficial.
+Niveles de ganancia (v3, analisis de la nota 2): primer momento en que la prima llega a +25%,
++50%, +75% y +100%, con el precio del subyacente en ese momento, para ver si se gano llegando
+al strike o cerca de el. Tambien el precio mas favorable del subyacente en los 45 dias.
 """
 from __future__ import annotations
 
@@ -25,7 +28,8 @@ from datetime import datetime, timedelta
 
 from common_utils import NY, bs_price, calculate_strike, fmt_ts, iv_for, parse_ts, to_float
 
-OPS_VERSION = 2
+OPS_VERSION = 3
+PROFIT_LEVELS = (25, 50, 75, 100)   # % de ganancia de la prima
 YEAR_SECONDS = 365 * 86400
 _INTERVALS = {"15m": timedelta(minutes=15), "60m": timedelta(minutes=60), "1h": timedelta(hours=1)}
 
@@ -59,7 +63,7 @@ def evaluate(cand: dict, bars: list[dict], daily: list[dict], cfg: dict, now: da
     op = {"ticker": cand["ticker"], "option_type": cand["type"], "channel": cand["channel"],
           "signal_timestamp": cand["ts"], "signal_key": cand["key"], "signal_id": cand.get("signal_id", ""),
           "message_id": cand.get("message_id", ""), "en_universo_original": cand.get("original", ""),
-          "ops_version": OPS_VERSION, "sombra_completa": 0}
+          "strike_vl": cand.get("strike_vl", ""), "ops_version": OPS_VERSION, "sombra_completa": 0}
     sig_ts = parse_ts(cand["ts"])
     nb = _num_bars(bars)
     entry_i = next((i for i, b in enumerate(nb) if b[0] >= sig_ts), None)
@@ -89,6 +93,8 @@ def evaluate(cand: dict, bars: list[dict], daily: list[dict], cfg: dict, now: da
 
     closed = None   # (ts, prima_salida, retorno, regla, spot)
     peak = trough = peak45 = trough45 = 0.0
+    levels: dict[int, tuple[datetime, float]] = {}   # nivel -> (momento, precio del subyacente)
+    fav_spot = spot
     last_end, last_close, last_ret = entry_ts, spot, 0.0
     expired = False
     for b_start, b_step, o, h, l, c, _iv in nb[entry_i:]:
@@ -99,6 +105,13 @@ def evaluate(cand: dict, bars: list[dict], daily: list[dict], cfg: dict, now: da
         fav, unf = (h, l) if otype == "CALL" else (l, h)
         r_open, r_hi, r_lo, r_close = ret_at(o, b_start), ret_at(fav, b_end), ret_at(unf, b_end), ret_at(c, b_end)
         peak45, trough45 = max(peak45, r_open, r_hi), min(trough45, r_open, r_lo)
+        fav_spot = max(fav_spot, fav) if otype == "CALL" else min(fav_spot, fav)
+        for lv in PROFIT_LEVELS:
+            if lv not in levels:
+                if r_open >= lv / 100:
+                    levels[lv] = (b_start, o)       # la vela abrio ya por encima del nivel
+                elif r_hi >= lv / 100:
+                    levels[lv] = (b_end, fav)
         if closed is None:
             peak, trough = max(peak, r_open, r_hi), min(trough, r_open, r_lo)
             if r_open <= sl:
@@ -113,6 +126,11 @@ def evaluate(cand: dict, bars: list[dict], daily: list[dict], cfg: dict, now: da
     if not expired and now >= expiry + timedelta(days=3):
         expired = True   # sin velas nuevas (fin de semana, ticker sin datos): se cierra igual
 
+    op["spot_favorable_45d"] = round(fav_spot, 4)
+    for lv in PROFIT_LEVELS:
+        ts_lv, spot_lv = levels.get(lv, (None, None))
+        op[f"nivel_{lv}_ts"] = fmt_ts(ts_lv) if ts_lv else ""
+        op[f"nivel_{lv}_spot"] = round(spot_lv, 4) if spot_lv else ""
     op.update({"peak_45d_pct": round(peak45 * 100, 2), "trough_45d_pct": round(trough45 * 100, 2),
                "toco_100": int(peak45 >= 1.0), "toco_150": int(peak45 >= 1.5), "toco_200": int(peak45 >= 2.0)})
     if expired:
@@ -150,7 +168,8 @@ def build_candidates(signals: list[dict], gravity: list[dict], cfg: dict) -> lis
             continue
         out.append({"ts": r["timestamp"], "ticker": r["ticker"], "type": r["signal_type"], "channel": r["channel"],
                     "key": f"{r['channel']}|{r['signal_id']}", "signal_id": r["signal_id"],
-                    "message_id": r["message_id"], "original": "1" if r["ticker"] in allowed else "0"})
+                    "message_id": r["message_id"], "original": "1" if r["ticker"] in allowed else "0",
+                    "strike_vl": r.get("strike_vl", "")})
     for r in (gravity if cfg.get("gravity_enabled", True) else []):
         if r["ticker"] not in allowed or r["signal_type"] not in ("CALL", "PUT") or r["timestamp"] < start:
             continue

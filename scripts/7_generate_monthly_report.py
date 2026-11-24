@@ -19,7 +19,7 @@ from datetime import date, datetime, timedelta
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common_utils import (NY, REPORT_STATE_PATH, REPORTS_DIR, get_config, load_state, log_event,  # noqa: E402
                           now_utc, send_email, update_state)
-from report_lib import (channels, OPS_HEADERS, channel_signals, discard_rows, esc, group_table,  # noqa: E402
+from report_lib import (channels, OPS_HEADERS, channel_signals, discard_rows, esc, group_table, levels_html,  # noqa: E402
                         kpis, load_data, milestones, milestones_html, nota2_html, ny_bounds, ops_rows,
                         page, pct, results_html, table, td_pct)
 from signal_parser import PARSER_VERSION  # noqa: E402
@@ -92,6 +92,8 @@ def build_monthly(data: dict, cfg: dict, now: datetime, month: str, late: bool) 
                                         _group_rows(group_table(ops, lambda o: o["ticker"])),
                                         "Sin operaciones cerradas.")
         + nota2_html(data, cfg)
+        + "<h2>Niveles de ganancia: +25%, +50%, +75% y +100%</h2>"
+        + levels_html(data, cfg, a, b, f"en {month}")
         + f"<h2>Operaciones abiertas o cerradas en {esc(month)}</h2>"
         + table(OPS_HEADERS, ops_rows(list({o["id"]: o for o in opened + closed_m}.values())), "Ninguna.")
     )

@@ -17,6 +17,7 @@
   "vicente_universe": "us_listed",
   "vicente_universe_doc": "docs/ADENDA-01-UNIVERSO.md",
   "repost_window_days": 45,
+  "strike_near_pct": 2,
   "symbols_max_age_days": 7,
   "database": "csv",
   "price_offhours_min_interval_hours": 4,
