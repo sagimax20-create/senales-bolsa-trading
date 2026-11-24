@@ -22,22 +22,68 @@ from __future__ import annotations
 import asyncio
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common_utils import (AUDIT_V1_COLS, AUDIT_V1_CSV, MESSAGES_COLS, MESSAGES_CSV, NY,  # noqa: E402
-                          SIGNALS_COLS, SIGNALS_CSV, append_csv, backup_once, csv_header, fmt_ts,
-                          get_config, load_csv, load_state, load_symbols, log_event, now_utc,
-                          parse_ts, sanitize_log_file, save_csv, update_state)
+from common_utils import (AUDIT_V1_COLS, AUDIT_V1_CSV, BACKUP_DIR, DAILY_COLS, DAILY_DIR,  # noqa: E402
+                          MESSAGES_COLS, MESSAGES_CSV, NY, SIGNALS_COLS, SIGNALS_CSV, SIGNALS_V1_COLS,
+                          append_csv, backup_once, csv_header, fmt_ts, get_config, get_daily_history,
+                          load_csv, load_state, load_symbols, log_event, now_utc, parse_ts,
+                          sanitize_log_file, save_csv, ticker_file, to_float, update_state)
 from signal_parser import (PARSER_VERSION, audit_v1_row, mark_reposts, message_motivo,  # noqa: E402
                            parse_message, text_sha256)
+
+# Un ticker escrito en minusculas solo se acepta si el strike publicado es coherente con el
+# precio real de ese dia (evita leer "Grab Jan 50 calls" como el ticker GRAB, que vale ~$5).
+STRIKE_SPOT_RANGE = (0.5, 2.0)
+
+
+def verify_lowercase(row: dict, spot_fn) -> str:
+    """'' si la señal con ticker en minusculas es coherente; si no, el motivo de descarte."""
+    strike = to_float(row.get("strike_vl"))
+    if strike is None:
+        return "minusculas_sin_strike"
+    spot = spot_fn(row["ticker"], parse_ts(row["timestamp"]).astimezone(NY).date()) if spot_fn else None
+    if not spot:
+        return "minusculas_sin_precio"
+    lo, hi = STRIKE_SPOT_RANGE
+    return "" if lo <= strike / spot <= hi else "minusculas_strike_incoherente"
+
+
+def make_spot_lookup():
+    """Cierre diario del ticker en una fecha (ultimo cierre anterior si no hubo sesion). Usa
+    data/prices_1d/ y descarga de Yahoo si falta el tramo; guarda lo descargado."""
+    cache: dict[str, list[dict]] = {}
+
+    def spot(ticker: str, d: date) -> float | None:
+        iso = d.isoformat()
+        if ticker not in cache:
+            path = DAILY_DIR / ticker_file(ticker)
+            rows = load_csv(path, DAILY_COLS, create=False)
+            stale = not rows or rows[0]["date"] > iso or (d - date.fromisoformat(rows[-1]["date"])).days > 4
+            if stale:
+                try:
+                    new = [{"date": h["date"].isoformat(), **{k: round(h[k], 4) for k in ("open", "high", "low", "close")}}
+                           for h in get_daily_history(ticker, "1y")]
+                    by = {r["date"]: r for r in rows}
+                    by.update({r["date"]: r for r in new})
+                    rows = [by[k] for k in sorted(by)]
+                    save_csv(path, DAILY_COLS, rows, backup=False)
+                except Exception as e:
+                    log_event(f"Script 1: sin precio diario de {ticker} ({type(e).__name__})", "WARNING")
+            cache[ticker] = rows
+        prior = [r for r in cache[ticker] if r["date"] <= iso]
+        return to_float(prior[-1]["close"]) if prior else None
+
+    return spot
 
 CHANNEL_TAG = "VICENTE_LUZ"
 
 
 def build_rows(messages: list[tuple[int, datetime, str]], symbols: set[str], cfg: dict,
-               history: list[dict]) -> tuple[list[dict], list[dict], dict[int, list[dict]]]:
-    """Aplica el parser a mensajes (id, fecha UTC, texto) en orden y marca reposteos.
+               history: list[dict], spot_fn=None) -> tuple[list[dict], list[dict], dict[int, list[dict]]]:
+    """Aplica el parser a mensajes (id, fecha UTC, texto) en orden, verifica los tickers escritos
+    en minusculas contra el precio (spot_fn) y marca reposteos.
 
     Devuelve (filas de signals.csv, filas de messages.csv, candidatas por message_id)."""
     allowed = set(cfg["allowed_tickers"])
@@ -56,13 +102,18 @@ def build_rows(messages: list[tuple[int, datetime, str]], symbols: set[str], cfg
                 "estado": c.estado, "motivo": c.motivo, "repite_a": "",
                 "strike_vl": "" if c.strike is None else f"{c.strike:g}", "expiry_vl": c.expiry,
                 "linea": str(c.line_no), "en_universo_original": "1" if c.ticker in allowed else "0",
-                "parser_version": str(PARSER_VERSION),
+                "parser_version": str(PARSER_VERSION), "ticker_escrito": c.escrito,
             })
         per_msg[mid] = rows
         sig_rows += rows
         msg_rows.append({"message_id": str(mid), "timestamp": fmt_ts(ts), "sha256": text_sha256(text),
                          "n_caracteres": len(text or ""), "n_candidatas": len(rows),
                          "parser_version": str(PARSER_VERSION), "_text": text, "_cands": cands})
+    for r in sig_rows:
+        if r["ticker_escrito"] == "minusculas" and r["estado"] == "valida":
+            motivo = verify_lowercase(r, spot_fn)
+            if motivo:
+                r["estado"], r["motivo"] = "descartada", motivo
     mark_reposts(sig_rows, history, float(cfg.get("repost_window_days", 45)))
     for m in msg_rows:  # contar validas DESPUES de marcar reposteos
         text, cands = m.pop("_text"), m.pop("_cands")
@@ -76,9 +127,9 @@ def build_rows(messages: list[tuple[int, datetime, str]], symbols: set[str], cfg
 
 
 def reprocess(messages: list[tuple[int, datetime, str]], symbols: set[str], cfg: dict,
-              old_rows: list[dict]) -> tuple[list[dict], list[dict], list[dict]]:
+              old_rows: list[dict], spot_fn=None) -> tuple[list[dict], list[dict], list[dict]]:
     """Reconstruye signals.csv y messages.csv desde cero y audita las filas de la version 1."""
-    sig_rows, msg_rows, per_msg = build_rows(messages, symbols, cfg, history=[])
+    sig_rows, msg_rows, per_msg = build_rows(messages, symbols, cfg, history=[], spot_fn=spot_fn)
     texts = {mid: text for mid, _, text in messages}
     audit = []
     for old in old_rows:
@@ -152,9 +203,10 @@ def run() -> int:
 
     old_rows, old_version = [], state.get("parser_version", 1)
     if full:
-        old_rows = load_csv(SIGNALS_CSV, SIGNALS_COLS, create=False)
-        if "estado" in csv_header(SIGNALS_CSV):
-            old_rows = []  # ya es v2: no hay filas v1 que auditar
+        old_rows = load_csv(SIGNALS_CSV, SIGNALS_V1_COLS, create=False)
+        if "estado" in csv_header(SIGNALS_CSV):  # ya no es v1: auditar contra la copia de la v1
+            v1 = sorted(BACKUP_DIR.glob("signals_v1_*.csv"))
+            old_rows = load_csv(v1[0], SIGNALS_V1_COLS, create=False) if v1 else []
     old_ids = {int(r["message_id"]) for r in old_rows if r.get("message_id")}
 
     messages = asyncio.run(_fetch(cfg, start, last_id, full, old_ids if full else set()))
@@ -169,7 +221,7 @@ def run() -> int:
         stamp = now_utc().strftime("%Y%m%d")
         backup_once(SIGNALS_CSV, f"signals_v{old_version}_{stamp}.csv")
         backup_once(MESSAGES_CSV, f"messages_v{old_version}_{stamp}.csv")
-        sig_rows, msg_rows, audit = reprocess(messages, load_symbols(), cfg, old_rows)
+        sig_rows, msg_rows, audit = reprocess(messages, symbols, cfg, old_rows, make_spot_lookup())
         save_csv(SIGNALS_CSV, SIGNALS_COLS, sig_rows)
         save_csv(MESSAGES_CSV, MESSAGES_COLS, msg_rows)
         if audit:
@@ -189,7 +241,7 @@ def run() -> int:
     history = load_csv(SIGNALS_CSV, SIGNALS_COLS)
     known = {r["message_id"] for r in load_csv(MESSAGES_CSV, MESSAGES_COLS)}
     messages = [m for m in messages if str(m[0]) not in known]
-    sig_rows, msg_rows, _ = build_rows(messages, symbols, cfg, history)
+    sig_rows, msg_rows, _ = build_rows(messages, symbols, cfg, history, make_spot_lookup())
     append_csv(SIGNALS_CSV, SIGNALS_COLS, sig_rows)
     append_csv(MESSAGES_CSV, MESSAGES_COLS, msg_rows)
     if messages:

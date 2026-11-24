@@ -60,7 +60,7 @@ SIGNALS_V1_COLS = ["timestamp", "ticker", "signal_type", "option_type", "strike_
                    "price_recommended", "channel", "message_id"]
 SIGNALS_COLS = SIGNALS_V1_COLS + [
     "signal_id", "estado", "motivo", "repite_a", "strike_vl", "expiry_vl", "linea",
-    "en_universo_original", "parser_version"]
+    "en_universo_original", "parser_version", "ticker_escrito"]
 MESSAGES_COLS = ["message_id", "timestamp", "sha256", "n_caracteres", "n_candidatas", "n_validas",
                  "motivo", "parser_version"]
 AUDIT_V1_COLS = SIGNALS_V1_COLS + ["estado_v2", "motivo_v2", "signal_id_v2"]

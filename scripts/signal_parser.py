@@ -10,6 +10,11 @@ ticker. Ninguna regla de esta version depende de una lista de palabras excluidas
    mensaje (o con $: $NVDA, $nvda) que existe en la lista de simbolos que cotizan en EE. UU.
    (data/ref/us_symbols.csv). Los de una letra (F, T, C) solo valen con $ o pegados al
    contrato ("F Nov 14 calls").
+   v3: el canal tambien escribe tickers en minusculas ("Fcx jan 50 calls"). Una palabra en
+   minusculas o con solo la inicial en mayuscula cuenta como ticker SOLO si: esta pegada al
+   contrato, tiene 3 letras o mas, esta en la lista, la linea no trae otro ticker en
+   mayusculas, y (paso posterior, scripts/1_parser_signals.py) el strike publicado es
+   coherente con el precio real de ese dia. Asi "Grab Jan 50 calls" no se lee como GRAB.
 2. Estructura de señal, en la misma linea: direccion (call/put, calls/puts o 200C/200P) y al
    menos uno de: strike, vencimiento (mes o fecha) o prima (@ 2.19, at 2.19, for 1.20 per).
 3. El ticker de la señal es el simbolo mas cercano ANTES del contrato (o justo despues:
@@ -27,7 +32,7 @@ import re
 from dataclasses import dataclass
 from datetime import date, datetime
 
-PARSER_VERSION = 2
+PARSER_VERSION = 3
 
 MONTHS = {
     # ingles
@@ -59,6 +64,7 @@ _TOKEN_RE = re.compile(r"""
   | (?P<pct>[+-]?\d+(?:[.,]\d+)?\s?%)
   | (?P<iso>(?<!\d)\d{4}-\d{2}-\d{2}(?!\d))
   | (?P<date>(?<![\d/.])\d{1,2}/\d{1,2}(?:/\d{2,4})?(?![\d/]))
+  | (?P<ord>(?<![\d.])\d{1,2}(?i:st|nd|rd|th)(?![A-Za-z]))
   | (?P<num>\$?\d+(?:,\d{3})*(?:[.,]\d+)?(?:[cCpP](?![A-Za-z]))?)
   | (?P<word>\$?[A-Za-zÁÉÍÓÚÑÜáéíóúñü]+(?:\.[A-Z](?![A-Za-z]))?(?:['’][A-Za-z]+)?)
   | (?P<at>@)
@@ -99,7 +105,9 @@ def tokenize(line: str) -> list[Tok]:
     for m in _TOKEN_RE.finditer(line):
         kind = m.lastgroup
         text = m.group(kind)
-        if kind == "num":
+        if kind == "ord":   # "Nov 20th": dia del vencimiento, no el ticker TH
+            out.append(Tok("num", text, float(re.match(r"\d+", text).group())))
+        elif kind == "num":
             suffix = None
             if text[-1] in "cCpP":
                 suffix = "CALL" if text[-1] in "cC" else "PUT"
@@ -138,8 +146,9 @@ def _is_plain_num(tok: Tok) -> bool:
     return tok.kind == "num" and tok.suffix_dir is None and tok.value is not None
 
 
-def _ticker_of(tok: Tok, symbols: set[str], adjacent: bool) -> str | None:
-    """Ticker si el token esta escrito como ticker y existe en la lista de EE. UU."""
+def _ticker_of(tok: Tok, symbols: set[str], adjacent: bool, allow_lower: bool = False) -> str | None:
+    """Ticker si el token esta escrito como ticker y existe en la lista de EE. UU.
+    Con allow_lower, acepta minusculas (3+ letras, pegado al contrato): ver regla 1."""
     if tok.kind != "word":
         return None
     base = tok.base
@@ -147,7 +156,9 @@ def _ticker_of(tok: Tok, symbols: set[str], adjacent: bool) -> str | None:
     sym = base.upper()
     if not cashtag:
         letters = sym.replace(".", "")
-        if not (base == sym and letters.isalpha() and letters.isascii()):
+        if not (letters.isalpha() and letters.isascii()):
+            return None
+        if base != sym and not (allow_lower and adjacent and len(letters) >= 3):
             return None   # escrito en minusculas o mixto: es una palabra, no un ticker
     if not re.fullmatch(r"[A-Z]{1,5}(?:\.[A-Z])?", sym) or sym not in symbols:
         return None
@@ -165,6 +176,7 @@ class Candidate:
     premium: float | None
     line_no: int
     estado: str = "valida"
+    escrito: str = "mayusculas"   # mayusculas | cashtag | minusculas
     motivo: str = ""
 
 
@@ -174,6 +186,15 @@ def _resolve_expiry(month: int, day: int | None, year: int | None, msg_date: dat
         if month < msg_date.month or (month == msg_date.month and day is not None and day < msg_date.day):
             year += 1
     return f"{year:04d}-{month:02d}-{day:02d}" if day else f"{year:04d}-{month:02d}"
+
+
+def _is_friday(month: int, day: int, msg_date: date) -> bool:
+    """¿Mes + dia es un viernes (dia normal de vencimiento de opciones)?"""
+    exp = _resolve_expiry(month, day, None, msg_date)
+    try:
+        return date.fromisoformat(exp).weekday() == 4
+    except ValueError:
+        return False
 
 
 def _expiry_near(toks: list[Tok], i: int, strike_idx: int | None, msg_date: date) -> tuple[str, int | None]:
@@ -259,6 +280,15 @@ def parse_message(text: str, symbols: set[str], msg_date: date | None = None) ->
                 strike, strike_idx = tok.value, i
             elif i > 0 and _is_plain_num(toks[i - 1]):
                 strike, strike_idx = toks[i - 1].value, i - 1
+                month = _month_of(toks, i - 2) if i > 1 else None
+                v = toks[i - 1].value
+                if month is not None and v.is_integer():
+                    # "Nov 20 calls": el numero pegado al mes puede ser el dia o el año
+                    alt = i - 3 if i > 2 and _is_plain_num(toks[i - 3]) else None   # "INTC 40 Nov 20 calls"
+                    if 2025 <= v <= 2031:
+                        strike, strike_idx = (toks[alt].value, alt) if alt is not None else (None, None)
+                    elif 1 <= v <= 31 and (alt is not None or _is_friday(month, int(v), msg_date)):
+                        strike, strike_idx = (toks[alt].value, alt) if alt is not None else (None, None)
             elif i > 1 and _is_plain_num(toks[i - 2]) and toks[i - 1].lower == "strike":
                 strike, strike_idx = toks[i - 2].value, i - 2
             expiry, exp_idx = _expiry_near(toks, i, strike_idx, msg_date)
@@ -280,6 +310,12 @@ def parse_message(text: str, symbols: set[str], msg_date: date | None = None) ->
                 ticker = _ticker_of(toks[k], symbols, adjacent=(k == spec_start - 1))
                 if ticker:
                     break
+            escrito = "mayusculas"
+            k = spec_start - 1   # v3: ticker en minusculas solo pegado al contrato ("Fcx jan 50 calls")
+            if not ticker and strike is not None and k >= 0 and k not in used and _month_of(toks, k) is None \
+                    and not _dir_of(toks[k]):
+                ticker = _ticker_of(toks[k], symbols, adjacent=True, allow_lower=True)
+                escrito = "minusculas" if ticker else escrito
             if not ticker:
                 for k in range(i + 1, min(len(toks), i + 5)):
                     if _dir_of(toks[k]):
@@ -303,7 +339,10 @@ def parse_message(text: str, symbols: set[str], msg_date: date | None = None) ->
             premium = _premium_in(toks, spec_start)
             if premium is None:
                 premium = _premium_in(toks, 0)
-            cand = Candidate(ticker, direction, strike, expiry, premium, ln + 1)
+            if escrito == "mayusculas" and any(t.kind == "word" and t.text.startswith("$") and
+                                               t.base.upper() == ticker for t in toks):
+                escrito = "cashtag"
+            cand = Candidate(ticker, direction, strike, expiry, premium, ln + 1, escrito=escrito)
             if exit_line:
                 cand.estado, cand.motivo = "descartada", "cierre_o_venta"
             elif strike is None and not expiry and premium is None:
