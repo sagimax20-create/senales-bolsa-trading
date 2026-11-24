@@ -2,6 +2,20 @@
 
 Esta bitácora registra las correcciones al código que implementa el protocolo y las interpretaciones de lo que el protocolo no define. `PROTOCOLO.md` no cambia; su huella SHA-256 está en [`PROTOCOLO.sha256`](../PROTOCOLO.sha256). Los cambios al protocolo mismo van en adendas: [`ADENDA-01-UNIVERSO.md`](ADENDA-01-UNIVERSO.md).
 
+## 2026-11-24 — Gravity Zone evaluada al cierre de cada día hábil
+
+Gravity Zone sigue siendo una aproximación: z-score diario más un filtro de rango. Sus umbrales los fijó la implementación original y **no están en PROTOCOLO.md**. Esta corrección no cambia la regla, solo **cuándo** se evalúa.
+
+| Antes | Ahora |
+|---|---|
+| Se evaluaba solo cuando GitHub corría, con la vela del día a medio formar. En oct-nov eso fue una vez por día. El filtro de 24 h dejó fuera la alerta de GLD del 23-oct. | Se evalúa el cierre de **cada** día hábil desde `capture_start`, con las velas diarias guardadas: como mucho una alerta por ticker, dirección y día. La hora de la alerta es el cierre (16:00 Nueva York) y la entrada en papel es la apertura siguiente. |
+
+La primera corrida respalda `gravity_alerts.csv` (v1) y lo reconstruye. Con las velas reales de 5 de los 8 tickers, la regla da 3 alertas desde el 5-oct: GLD el 22, 23 y 26 de octubre. Antes eran 2. GDX, MARA y DIS se evalúan en Actions.
+
+Para tener **más** alertas de Gravity Zone hay dos caminos, y ninguno se aplicó:
+- **Conectar el indicador real de TradingView** mediante alertas.
+- **Cambiar la regla aproximada.** Por ejemplo, sin el filtro de rango habría unas 6 veces más alertas. Este camino requiere una adenda con análisis de sesgo y elegir la regla por su lógica, no por sus retornos.
+
 ## 2026-11-24 — Parser v4 (mensajes reales del canal)
 
 El responsable del protocolo copió 11 mensajes reales. El parser v3 acertó en 7 y falló en 4. Cada fallo reveló un formato real del canal:
