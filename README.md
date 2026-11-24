@@ -81,7 +81,7 @@ En la siguiente corrida del monitor llega un mensaje de bienvenida. Desde ahí l
 | `/abiertas` | Operaciones abiertas: entrada, strike, retorno actual, nivel máximo alcanzado y distancia al strike |
 | `/niveles` | Últimos niveles +25/+50/+75/+100%, con distancia al strike del protocolo y al de Vicente |
 | `/senales` (o `/señales`) | Últimas señales válidas de Vicente Luz y descartes de la semana |
-| `/aciertos` | Tickers con más aciertos: % de take-profit y % que llegó al strike (mínimo 2 operaciones) |
+| `/aciertos` | Tickers donde más acertó Vicente: el precio tocó **su** strike antes de **su** vencimiento (mínimo 2 señales resueltas), con el take-profit del protocolo al lado |
 | `/ayuda` | Lista de comandos |
 
 - Responde **solo** al chat `TELEGRAM_CHAT_ID`; a cualquier otro chat no le contesta.

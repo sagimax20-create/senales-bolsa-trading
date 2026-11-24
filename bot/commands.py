@@ -10,8 +10,8 @@ from collections import defaultdict
 from datetime import datetime
 
 from ops_engine import PROFIT_LEVELS
-from report_lib import (MOTIVOS, distance_label, level_events, milestones, ops_of, pct, strike_distance,
-                        summarize, usd)
+from report_lib import (MOTIVOS, VL_ESTADOS, distance_label, level_events, milestones, ops_of, pct,
+                        strike_distance, summarize, usd, vl_easy, vl_ranking, vl_summary)
 from common_utils import to_float
 
 MAX_CHARS = 3900
@@ -23,7 +23,7 @@ HELP = (
     "/abiertas – operaciones abiertas: retorno actual, nivel máximo y distancia al strike\n"
     "/niveles – últimos niveles +25/+50/+75/+100% alcanzados\n"
     "/senales – últimas señales de Vicente Luz y descartes de la semana\n"
-    "/aciertos – tickers con más aciertos (take-profit y llegada al strike)\n"
+    "/aciertos – tickers donde más acertó Vicente (su strike antes de su vencimiento)\n"
     "/ayuda – esta lista\n\n" + DISCLAIMER
 )
 
@@ -44,6 +44,26 @@ def _clip(text: str) -> str:
 def _max_level(o: dict) -> int | None:
     reached = [lv for lv in PROFIT_LEVELS if o.get(f"nivel_{lv}_ts")]
     return max(reached) if reached else None
+
+
+def vl_line(o: dict | None) -> str:
+    """Estado de la señal frente al contrato de Vicente, en una linea."""
+    if not o:
+        return "Vicente: sin dato"
+    e = o.get("vl_estado") or "sin_dato"
+    k, v = o.get("strike_vl") or "sin dato", o.get("vl_vencimiento") or "sin dato"
+    if e == "acerto":
+        txt = f"acertó: tocó {k} el {o.get('vl_fecha_toque')} ({o.get('vl_dias_toque')} días)"
+        txt += " — ya estaba en el dinero al publicarse" if vl_easy(o) else ""
+    elif e == "no_acerto":
+        txt = f"no acertó: venció el {v} sin tocar {k} (le faltó {pct(to_float(o.get('vl_mejor_pct')))})"
+    elif e == "en_curso":
+        best = to_float(o.get("vl_mejor_pct"))
+        txt = f"en curso: strike {k}, vence {v} (" + ("aún sin precios posteriores a la señal" if best is None
+                                                    else f"su mejor precio hasta hoy quedó a {pct(best)} del strike") + ")"
+    else:
+        txt = "sin dato (el mensaje no traía strike o vencimiento)"
+    return "Vicente: " + txt
 
 
 def cmd_estado(data: dict, cfg: dict, now: datetime, state: dict) -> str:
@@ -84,7 +104,7 @@ def cmd_abiertas(data: dict, cfg: dict) -> str:
             f"   retorno actual (modelo): {pct(to_float(o.get('retorno_neto_pct')))} neto · "
             f"nivel máximo: {('+' + str(lv) + '%') if lv else 'ninguno'} · "
             f"mejor precio: {_money(o.get('spot_favorable_45d'))} ({distance_label(d, near)}) · "
-            f"{o.get('days_held') or '0'} días")
+            f"{o.get('days_held') or '0'} días\n   {vl_line(o)}")
     lines.append(DISCLAIMER)
     return _clip("\n".join(lines))
 
@@ -110,6 +130,7 @@ def cmd_niveles(data: dict, cfg: dict, n: int = 10) -> str:
 
 def cmd_senales(data: dict, cfg: dict, now: datetime, n: int = 10) -> str:
     valid = sorted(data["valid"], key=lambda s: s["timestamp"])[-n:][::-1]
+    by_sig = {o.get("signal_id"): o for o in ops_of(data, "VICENTE_LUZ")}
     lines = [f"📨 Últimas {len(valid)} señales válidas de Vicente Luz"]
     for s in valid:
         extra = " · ".join(x for x in (
@@ -117,7 +138,8 @@ def cmd_senales(data: dict, cfg: dict, now: datetime, n: int = 10) -> str:
             f"vence {s['expiry_vl']}" if s.get("expiry_vl") else "",
             f"prima {s['price_recommended']}" if s.get("price_recommended") else "",
             f"spread {s['spread']}" if s.get("spread") else "") if x)
-        lines.append(f"{_d(s['timestamp'])} UTC · {s['ticker']} {s['signal_type']}" + (f" · {extra}" if extra else ""))
+        lines.append(f"{_d(s['timestamp'])} UTC · {s['ticker']} {s['signal_type']}" + (f" · {extra}" if extra else "")
+                     + f"\n   {vl_line(by_sig.get(s.get('signal_id')))}")
     week_ago = now.timestamp() - 7 * 86400
     disc = defaultdict(int)
     for s in data["signals"]:
@@ -135,30 +157,22 @@ def cmd_senales(data: dict, cfg: dict, now: datetime, n: int = 10) -> str:
     return _clip("\n".join(lines))
 
 
-def cmd_aciertos(data: dict, cfg: dict, min_ops: int = 2, top: int = 10) -> str:
-    """Ranking por ticker: % de operaciones cerradas por take-profit y % que llego al strike."""
-    groups = defaultdict(list)
-    for o in ops_of(data, "VICENTE_LUZ"):
-        if o["estado"] == "closed":
-            groups[o["ticker"]].append(o)
-    rows = []
-    for t, ops in groups.items():
-        if len(ops) < min_ops:
-            continue
-        tp = sum(o["reason_exit"] == "take_profit" for o in ops)
-        dists = [strike_distance(o["option_type"], o.get("spot_favorable_45d"), o.get("strike_usd")) for o in ops]
-        hit = sum(1 for d in dists if d is not None and d >= 0)
-        avg = sum(to_float(o.get("retorno_neto_pct"), 0.0) for o in ops) / len(ops)
-        rows.append((tp / len(ops), len(ops), t, tp, hit, avg))
+def cmd_aciertos(data: dict, cfg: dict, min_resolved: int = 2, top: int = 10) -> str:
+    """Ranking por ticker: ¿el precio toco el strike de Vicente antes de SU vencimiento?"""
+    ops = ops_of(data, "VICENTE_LUZ")
+    rows = vl_ranking(ops, min_resolved)
+    s = vl_summary(ops)
     if not rows:
-        return f"Aún no hay tickers con {min_ops} o más operaciones cerradas.\n" + DISCLAIMER
-    rows.sort(key=lambda r: (-r[0], -r[1], r[2]))
-    lines = [f"🏆 Tickers con más aciertos (mínimo {min_ops} operaciones cerradas)"]
-    for i, (rate, n, t, tp, hit, avg) in enumerate(rows[:top], 1):
-        lines.append(f"{i}. {t}: take-profit {tp}/{n} ({rate * 100:.0f}%) · llegó al strike {hit}/{n} · "
-                     f"neto promedio {pct(avg)}")
-    lines.append("Con pocas operaciones por ticker el % no es confiable. «Llegó al strike» = el subyacente "
-                 "pasó el strike del protocolo en algún momento de los 45 días.")
+        return f"Aún no hay tickers con {min_resolved} o más señales resueltas.\n" + DISCLAIMER
+    lines = [f"🏆 Dónde más acertó Vicente (su strike antes de su vencimiento; mínimo {min_resolved} señales resueltas)",
+             f"Total: acertó {s['aciertos']}/{s['resueltas']} ({pct(s['tasa'], 0, False)}); sin contar las que ya estaban "
+             f"en el dinero al publicarse: {s['aciertos_dificiles']}/{s['dificiles']} ({pct(s['tasa_dificil'], 0, False)}). "
+             f"En curso: {s['counts'].get('en_curso', 0)}."]
+    for i, r in enumerate(rows[:top], 1):
+        easy = f" ({r['faciles']} ya en el dinero)" if r["faciles"] else ""
+        lines.append(f"{i}. {r['ticker']}: acertó {r['aciertos']}/{r['resueltas']} ({r['tasa']:.0f}%){easy} · "
+                     f"en curso {r['en_curso']} · take-profit protocolo {r['tp']}/{r['cerradas']}")
+    lines.append("Con pocas señales por ticker el % no es confiable. Fechas de cada señal: /senales.")
     lines.append(DISCLAIMER)
     return _clip("\n".join(lines))
 

@@ -5,7 +5,8 @@ from datetime import datetime, timedelta, timezone
 import _paths  # noqa: F401
 
 from common_utils import DEFAULT_CONFIG, bs_price, fmt_ts  # noqa: E402
-from ops_engine import build_candidates, commission_pct, evaluate  # noqa: E402
+from datetime import date  # noqa: E402
+from ops_engine import build_candidates, commission_pct, evaluate, third_friday, vicente_outcome, vl_expiry_date  # noqa: E402
 
 CFG = dict(DEFAULT_CONFIG)
 T0 = datetime(2026, 11, 2, 15, 0, tzinfo=timezone.utc)
@@ -130,6 +131,71 @@ class ProfitLevelsTest(unittest.TestCase):
         c = cand()
         c["strike_vl"] = "105"
         self.assertEqual(evaluate(c, bars([FLAT, FLAT]), [], CFG, T0 + timedelta(hours=3))["strike_vl"], "105")
+
+
+class VicenteOutcomeTest(unittest.TestCase):
+    """¿El precio toco el strike de Vicente antes de SU vencimiento? (analisis aparte del protocolo)"""
+
+    def info(self, strike="105", expiry="2026-11-13", typ="CALL", spread="", ts=T0):
+        return {"option_type": typ, "signal_timestamp": fmt_ts(ts), "strike_vl": strike, "expiry_vl": expiry,
+                "spread_vl": spread}
+
+    def daily(self, rows):
+        return [{"date": d, "open": o, "high": h, "low": l, "close": c} for d, o, h, l, c in rows]
+
+    def test_expiry_dates(self):
+        self.assertEqual(third_friday(2026, 12), date(2026, 12, 18))
+        self.assertEqual(third_friday(2027, 1), date(2027, 1, 15))
+        self.assertEqual(third_friday(2026, 6), date(2026, 6, 18))     # 19-jun es feriado (Juneteenth): jueves
+        self.assertEqual(vl_expiry_date("2026-12"), date(2026, 12, 18))
+        self.assertEqual(vl_expiry_date("2026-11-13"), date(2026, 11, 13))
+        self.assertIsNone(vl_expiry_date(""))
+
+    def test_touch_on_a_later_day(self):
+        daily = self.daily([("2026-11-02", 100, 101, 99, 100), ("2026-11-03", 100, 103, 99, 102),
+                            ("2026-11-04", 102, 105.5, 101, 105)])
+        out = vicente_outcome(self.info(), [], daily, datetime(2026, 11, 20, tzinfo=timezone.utc))
+        self.assertEqual((out["vl_estado"], out["vl_fecha_toque"], out["vl_dias_toque"]), ("acerto", "2026-11-04", 2))
+        self.assertEqual(out["vl_dist_inicial_pct"], round((100 - 105) / 105 * 100, 2))   # no estaba en el dinero
+
+    def test_touch_same_day_only_after_the_signal(self):
+        before = bars([(100, 106, 100, 101)], start=T0 - timedelta(hours=2))   # antes de la señal: no cuenta
+        after = bars([(101, 105.2, 101, 104)], start=T0 + timedelta(minutes=15))
+        out = vicente_outcome(self.info(), before + after, [], datetime(2026, 11, 20, tzinfo=timezone.utc))
+        self.assertEqual((out["vl_estado"], out["vl_dias_toque"]), ("acerto", 0))
+
+    def test_not_reached_before_expiry(self):
+        daily = self.daily([("2026-11-03", 100, 103, 99, 102), ("2026-11-13", 102, 104, 101, 103),
+                            ("2026-11-16", 103, 110, 103, 109)])      # despues del vencimiento: no cuenta
+        out = vicente_outcome(self.info(), [], daily, datetime(2026, 11, 20, tzinfo=timezone.utc))
+        self.assertEqual(out["vl_estado"], "no_acerto")
+        self.assertEqual(out["vl_mejor_pct"], round((104 - 105) / 105 * 100, 2))
+
+    def test_in_progress_before_expiry_and_no_data(self):
+        daily = self.daily([("2026-11-03", 100, 103, 99, 102)])
+        self.assertEqual(vicente_outcome(self.info(), [], daily, datetime(2026, 11, 5, tzinfo=timezone.utc))["vl_estado"],
+                         "en_curso")
+        self.assertEqual(vicente_outcome(self.info(strike=""), [], daily, datetime(2026, 11, 5, tzinfo=timezone.utc))["vl_estado"],
+                         "sin_dato")
+
+    def test_put(self):
+        daily = self.daily([("2026-11-03", 100, 101, 94.5, 95)])
+        self.assertEqual(vicente_outcome(self.info(strike="95", typ="PUT"), [], daily,
+                                         datetime(2026, 11, 20, tzinfo=timezone.utc))["vl_estado"], "acerto")
+
+    def test_already_in_the_money(self):
+        daily = self.daily([("2026-11-03", 110, 111, 109, 110)])
+        out = vicente_outcome(self.info(strike="100"), [], daily, datetime(2026, 11, 20, tzinfo=timezone.utc))
+        self.assertEqual(out["vl_estado"], "acerto")
+        self.assertGreater(out["vl_dist_inicial_pct"], 0)
+
+    def test_bull_put_spread_decided_at_expiry_close(self):
+        sp = "PUT 28920/28930"   # alcista: gana el maximo si cierra por encima de 28930
+        ok = self.daily([("2026-11-13", 28900, 29000, 28880, 28950)])
+        bad = self.daily([("2026-11-13", 28900, 29000, 28880, 28925)])
+        now = datetime(2026, 11, 20, tzinfo=timezone.utc)
+        self.assertEqual(vicente_outcome(self.info(strike="28920", spread=sp), [], ok, now)["vl_estado"], "acerto")
+        self.assertEqual(vicente_outcome(self.info(strike="28920", spread=sp), [], bad, now)["vl_estado"], "no_acerto")
 
 
 class CandidatesTest(unittest.TestCase):

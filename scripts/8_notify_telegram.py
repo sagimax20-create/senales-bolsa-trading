@@ -12,7 +12,9 @@ Credenciales (GitHub Secrets; sin ellas el script no hace nada):
 Primera activacion: manda un mensaje de bienvenida y marca como avisados los niveles ya
 alcanzados, para no mandar el historico. Si en una corrida aparecen mas de MAX_EACH niveles
 nuevos (por ejemplo tras un reprocesamiento), manda un solo resumen.
-Estado: data/state.json -> levels_notified. El token nunca se escribe en el log.
+Tambien avisa cuando una señal ACIERTA segun el contrato de Vicente (el precio toco su strike
+antes de su vencimiento); la primera vez marca las historicas sin enviarlas.
+Estado: data/state.json -> levels_notified y vl_notified. El token nunca se escribe en el log.
 """
 from __future__ import annotations
 
@@ -24,7 +26,7 @@ import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common_utils import get_config, load_state, log_event, update_state  # noqa: E402
-from report_lib import distance_label, level_events, load_data, ops_of  # noqa: E402
+from report_lib import distance_label, level_events, load_data, ops_of, vl_easy  # noqa: E402
 
 MAX_EACH = 20          # mas niveles nuevos que esto en una corrida: un solo resumen
 TELEGRAM_LIMIT = 3800  # caracteres por mensaje (el limite de Telegram es 4096)
@@ -55,6 +57,22 @@ def format_event(e: dict, near: float) -> str:
          if d_vl is not None else "Strike de Vicente: sin dato"),
         f"Estado: {e['estado']}",
     ]
+    return "\n".join(lines)
+
+
+def vl_key(o: dict) -> str:
+    return f"{o['signal_key']}|vl"
+
+
+def format_vl(o: dict) -> str:
+    result = {"take_profit": "take-profit (+50%)", "stop_loss": "stop-loss (−50%)", "expiry": "vencimiento"}.get(
+        o.get("reason_exit"), "operación abierta" if o.get("estado") == "open" else "sin dato")
+    lines = [f"🎯 Vicente acertó: {o['ticker']} {o['option_type']}",
+             f"Señal del {o['signal_timestamp'][:10]} · strike de Vicente {_money(o.get('strike_vl'))} · vencía el "
+             f"{o.get('vl_vencimiento') or 'sin dato'}",
+             f"Tocó su strike el {o.get('vl_fecha_toque')} ({o.get('vl_dias_toque')} días después de la señal)"
+             + (" — ya estaba en el dinero al publicarse" if vl_easy(o) else ""),
+             f"Resultado del protocolo (45 días, +50% / −50%): {result}"]
     return "\n".join(lines)
 
 
@@ -97,14 +115,7 @@ def send(token: str, chat_id: str, text: str) -> bool:
     return False
 
 
-def main() -> int:
-    token, chat_id = os.getenv("TELEGRAM_BOT_TOKEN"), os.getenv("TELEGRAM_CHAT_ID")
-    if not token or not chat_id:
-        log_event("Script 8: sin TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID; avisos por Telegram desactivados")
-        return 0
-    cfg = get_config()
-    near = float(cfg.get("strike_near_pct", 2))
-    events = level_events(ops_of(load_data(cfg), "VICENTE_LUZ"))
+def notify_levels(token: str, chat_id: str, events: list[dict], near: float) -> bool:
     notified = load_state().get("levels_notified")
     mode, new = plan(events, notified)
     if mode == "init":
@@ -112,12 +123,12 @@ def main() -> int:
                 f"+75% o +100%. Ya había {len(events)} niveles alcanzados (están en el reporte semanal). "
                 "Dinero ficticio; análisis de datos, no asesoría financiera.")
         if not send(token, chat_id, text):
-            return 1
+            return False
         update_state(levels_notified=sorted(event_key(e) for e in events))
         log_event(f"Script 8: avisos activados; {len(events)} niveles historicos marcados sin enviar")
-        return 0
+        return True
     if mode == "nada":
-        return 0
+        return True
     done = set(notified)
     if mode == "resumen":
         by_level = {lv: sum(1 for e in new if e["nivel"] == lv) for lv in sorted({e["nivel"] for e in new})}
@@ -133,7 +144,45 @@ def main() -> int:
     sent = len(done) - len(set(notified))
     update_state(levels_notified=sorted(done))
     log_event(f"Script 8: {sent} de {len(new)} niveles nuevos avisados por Telegram")
-    return 0 if sent == len(new) else 1
+    return sent == len(new)
+
+
+def notify_vl(token: str, chat_id: str, ops: list[dict]) -> bool:
+    hits = sorted((o for o in ops if o.get("vl_estado") == "acerto"), key=lambda o: o.get("vl_fecha_toque") or "")
+    notified = load_state().get("vl_notified")
+    if notified is None:   # primera vez: sin enviar el historico
+        update_state(vl_notified=sorted(vl_key(o) for o in hits))
+        log_event(f"Script 8: {len(hits)} aciertos historicos de Vicente marcados sin enviar")
+        return True
+    done = set(notified)
+    new = [o for o in hits if vl_key(o) not in done]
+    if not new:
+        return True
+    if len(new) > MAX_EACH:
+        if send(token, chat_id, f"🎯 {len(new)} aciertos nuevos de Vicente (posible reprocesamiento). "
+                                "Detalle con /aciertos o en el reporte semanal."):
+            done |= {vl_key(o) for o in new}
+    else:
+        texts = [format_vl(o) for o in new]
+        for group in pack(texts):
+            if send(token, chat_id, "\n\n".join(texts[i] for i in group)):
+                done |= {vl_key(new[i]) for i in group}
+    sent = len(done) - len(set(notified))
+    update_state(vl_notified=sorted(done))
+    log_event(f"Script 8: {sent} de {len(new)} aciertos de Vicente avisados por Telegram")
+    return sent == len(new)
+
+
+def main() -> int:
+    token, chat_id = os.getenv("TELEGRAM_BOT_TOKEN"), os.getenv("TELEGRAM_CHAT_ID")
+    if not token or not chat_id:
+        log_event("Script 8: sin TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID; avisos por Telegram desactivados")
+        return 0
+    cfg = get_config()
+    ops = ops_of(load_data(cfg), "VICENTE_LUZ")
+    ok_levels = notify_levels(token, chat_id, level_events(ops), float(cfg.get("strike_near_pct", 2)))
+    ok_vl = notify_vl(token, chat_id, ops)
+    return 0 if ok_levels and ok_vl else 1
 
 
 if __name__ == "__main__":

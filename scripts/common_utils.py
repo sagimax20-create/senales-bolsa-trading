@@ -83,7 +83,10 @@ OPS_COLS = ["id", "timestamp_entry", "ticker", "option_type", "strike_usd", "pri
             # v3: niveles de ganancia de la prima y precio del subyacente en ese momento
             "strike_vl", "spot_favorable_45d",
             "nivel_25_ts", "nivel_25_spot", "nivel_50_ts", "nivel_50_spot",
-            "nivel_75_ts", "nivel_75_spot", "nivel_100_ts", "nivel_100_spot"]
+            "nivel_75_ts", "nivel_75_spot", "nivel_100_ts", "nivel_100_spot",
+            # v4: acierto segun el contrato publicado por Vicente (su strike y su vencimiento)
+            "expiry_vl", "spread_vl", "vl_vencimiento", "vl_estado", "vl_fecha_toque", "vl_dias_toque",
+            "vl_mejor_pct", "vl_dist_inicial_pct"]
 
 DEFAULT_CONFIG = {
     "allowed_tickers": ["GDX", "NVDA", "MARA", "GLD", "INTC", "MSFT", "DIS", "FCX"],
