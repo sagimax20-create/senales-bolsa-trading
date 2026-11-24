@@ -1,20 +1,33 @@
-name: Monthly Report - Last Day of Month at 4 PM ET
+name: Monthly Report - Last Day of Month
 
-# Ejecuta el último día de cada mes a las 4:00 PM ET
-# Se ejecuta entre 28-31 (cubre todos los meses), pero el script verifica si es el último día
+# PROTOCOLO §9: reporte mensual el ultimo dia del mes. El script decide en hora de Nueva York si
+# hoy es el ultimo dia; ademas envia, marcado "tardio", cualquier mes anterior que no se haya
+# enviado (el de octubre de 2026 fallo por un error de sintaxis de la version 1 de este archivo).
+# 21:37 UTC = despues del cierre de NYSE en invierno y en verano. El dia 1 corre de respaldo.
 on:
   schedule:
-    # Últimos días de cada mes a las 8:20 PM UTC (4 PM ET)
-    - cron: '20 21 28-31 * *'
+    - cron: '37 21 28-31 * *'
+    - cron: '37 13 1 * *'
   workflow_dispatch:
+    inputs:
+      month:
+        description: 'Mes a enviar (AAAA-MM). Vacio = lo que corresponda hoy'
+        required: false
+        default: ''
 
+# Usa los datos que deja el monitor (señales, velas y operaciones) y solo escribe reports/ y
+# data/report_state.json: asi nunca choca al hacer push con los commits del monitor.
 permissions:
   contents: write
+
+concurrency:
+  group: senales-monthly
+  cancel-in-progress: false
 
 jobs:
   monthly_report:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -26,36 +39,28 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Check if last day of month
-        id: check_last_day
-        run: |
-          from datetime import datetime, timedelta
-          today = datetime.utcnow().date()
-          tomorrow = today + timedelta(days=1)
-          is_last_day = today.month != tomorrow.month
-          print(f"Is last day of month: {is_last_day}")
-          print(f"LAST_DAY={is_last_day}" >> $GITHUB_OUTPUT)
-        shell: python
-
-      - name: Generate Monthly Report
-        if: ${{ steps.check_last_day.outputs.LAST_DAY == 'True' }}
+      - name: Generate and send monthly report
         env:
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           ALERT_EMAIL_TO: ${{ secrets.ALERT_EMAIL_TO }}
+          REPORT_MONTH: ${{ inputs.month }}
         run: python scripts/7_generate_monthly_report.py
 
       - name: Commit & push changes
-        if: ${{ steps.check_last_day.outputs.LAST_DAY == 'True' }}
+        if: ${{ !cancelled() }}
         run: |
           git config user.email "signal-bot@${GITHUB_SERVER_URL##*/}.invalid"
           git config user.name "Signal Bot"
-          git add reports data
+          git add reports data/report_state.json
           if git diff --cached --quiet; then
             echo "Sin cambios que guardar"
-          else
-            git commit -m "Auto: reporte mensual $(date -u +'%Y-%m-%d %H:%M') UTC"
-            git pull --rebase --autostash
-            git push
+            exit 0
           fi
+          git commit -m "Auto: reporte mensual $(date -u +'%Y-%m-%d %H:%M') UTC"
+          for i in 1 2 3; do
+            git pull --rebase --autostash && git push && exit 0
+            sleep $((i * 10))
+          done
+          exit 1

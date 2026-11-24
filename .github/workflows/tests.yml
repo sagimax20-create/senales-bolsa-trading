@@ -1,0 +1,26 @@
+name: Tests
+
+# Pruebas del parser, del motor de operaciones y de los reportes (unittest, sin red).
+on:
+  pull_request:
+  push:
+    branches-ignore: [main]
+    paths: ['scripts/**', 'tests/**', 'config.json', 'data/ref/**', '.github/workflows/tests.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run unit tests
+        run: python -m unittest discover -s tests -v

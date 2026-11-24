@@ -1,258 +1,148 @@
-"""Script 7 — Generador de Reporte Mensual.
+"""Script 7 — Reporte mensual (PROTOCOLO §9: ultimo dia del mes; analisis detallado por
+ticker, por canal y por tipo de opcion).
 
-Agrega datos de los últimos 30 días, genera un reporte HTML detallado y envía por email.
-Se ejecuta el último día del mes a las 4:00 PM ET (cierre de NYSE).
-
-Credenciales:
-  SMTP_HOST, SMTP_USER, SMTP_PASS, ALERT_EMAIL_TO (requeridas)
+Que mes envia (fechas en hora de Nueva York):
+  - El ultimo dia del mes: el mes en curso.
+  - Cualquier mes anterior (desde capture_start) que no figure en data/report_state.json -> monthly_sent:
+    se envia marcado "tardio". Asi un retraso de GitHub o un fallo no deja un mes sin reporte
+    (el de octubre de 2026 nunca llego por un error del workflow).
+  - --month AAAA-MM: ese mes, aunque ya se haya enviado.
+Escribe reports/monthly_report_AAAA-MM.html y reports/report_monthly.html (el ultimo).
+Credenciales: SMTP_HOST, SMTP_USER, SMTP_PASS, ALERT_EMAIL_TO.
 """
+from __future__ import annotations
+
 import os
 import sys
-from datetime import datetime, timedelta
-from pathlib import Path
-from collections import defaultdict
+from datetime import date, datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common_utils import get_config, load_csv, log_event, SIGNALS_CSV, SIGNALS_COLS
+from common_utils import (NY, REPORT_STATE_PATH, REPORTS_DIR, get_config, load_state, log_event,  # noqa: E402
+                          now_utc, send_email, update_state)
+from report_lib import (CHANNELS, OPS_HEADERS, channel_signals, discard_rows, esc, group_table,  # noqa: E402
+                        kpis, load_data, milestones, milestones_html, nota2_html, ny_bounds, ops_rows,
+                        page, pct, results_html, table, td_pct)
+from signal_parser import PARSER_VERSION  # noqa: E402
 
-def generate_monthly_report() -> int:
-    """Genera reporte mensual y lo envía por email."""
-    try:
-        cfg = get_config()
 
-        # Leer datos
-        signals = load_csv(SIGNALS_CSV, SIGNALS_COLS)
+def month_start(d: date) -> date:
+    return d.replace(day=1)
 
-        if not signals:
-            log_event("Script 7: Sin señales este mes", "WARNING")
-            return 0
 
-        # Filtrar últimos 30 días
-        now = datetime.utcnow()
-        month_ago = now - timedelta(days=30)
+def next_month(d: date) -> date:
+    return (d.replace(day=28) + timedelta(days=4)).replace(day=1)
 
-        monthly_signals = []
-        for s in signals:
-            try:
-                ts = datetime.fromisoformat(s["timestamp"].replace("Z", "+00:00"))
-                if ts >= month_ago:
-                    monthly_signals.append(s)
-            except (ValueError, KeyError):
-                continue
 
-        # Estadísticas
-        total = len(monthly_signals)
-        calls = sum(1 for s in monthly_signals if s.get("signal_type") == "CALL")
-        puts = sum(1 for s in monthly_signals if s.get("signal_type") == "PUT")
-        call_pct = (calls / total * 100) if total > 0 else 0
-        put_pct = (puts / total * 100) if total > 0 else 0
+def months_to_send(today: date, sent: set[str], capture_start: str, forced: str | None = None) -> list[tuple[str, bool]]:
+    """[(AAAA-MM, tardio)] a enviar hoy."""
+    if forced:
+        return [(forced, False)]
+    out = []
+    m = month_start(date.fromisoformat(capture_start))
+    current = month_start(today)
+    while m < current:
+        if m.strftime("%Y-%m") not in sent:
+            out.append((m.strftime("%Y-%m"), True))
+        m = next_month(m)
+    if (today + timedelta(days=1)).month != today.month and current.strftime("%Y-%m") not in sent:
+        out.append((current.strftime("%Y-%m"), False))
+    return out
 
-        tickers = {}
-        for s in monthly_signals:
-            t = s.get("ticker", "UNKNOWN")
-            tickers[t] = tickers.get(t, 0) + 1
 
-        # Análisis por día
-        daily_stats = defaultdict(lambda: {"total": 0, "calls": 0, "puts": 0})
-        for s in monthly_signals:
-            try:
-                ts = datetime.fromisoformat(s["timestamp"].replace("Z", "+00:00"))
-                day = ts.strftime("%Y-%m-%d")
-                daily_stats[day]["total"] += 1
-                if s.get("signal_type") == "CALL":
-                    daily_stats[day]["calls"] += 1
-                else:
-                    daily_stats[day]["puts"] += 1
-            except (ValueError, KeyError):
-                continue
+def _group_rows(groups: dict) -> list[list]:
+    return [[k, v["n"], td_pct(v["avg"]), f"{v['win']:.0f}%"] for k, v in groups.items()]
 
-        # Generar HTML
-        html_content = f"""
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <title>Reporte Mensual - Señales de Bolsa</title>
-            <style>
-                body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }}
-                .container {{ background: white; padding: 30px; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.3); max-width: 900px; margin: 0 auto; }}
-                h1 {{ color: #333; border-bottom: 4px solid #667eea; padding-bottom: 15px; margin-bottom: 30px; }}
-                h2 {{ color: #555; margin-top: 30px; border-left: 4px solid #667eea; padding-left: 15px; }}
-                .stats {{ display: grid; grid-template-columns: repeat(5, 1fr); gap: 15px; margin: 25px 0; }}
-                .stat-box {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 8px; text-align: center; box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4); }}
-                .stat-value {{ font-size: 32px; font-weight: bold; }}
-                .stat-label {{ font-size: 12px; margin-top: 8px; opacity: 0.9; }}
-                .stat-box.calls {{ background: linear-gradient(135deg, #00aa00 0%, #00cc00 100%); }}
-                .stat-box.puts {{ background: linear-gradient(135deg, #cc0000 0%, #ff3333 100%); }}
-                table {{ width: 100%; border-collapse: collapse; margin: 20px 0; }}
-                th {{ background: #667eea; color: white; padding: 12px; text-align: left; font-weight: 600; }}
-                td {{ padding: 12px; border-bottom: 1px solid #eee; }}
-                tr:hover {{ background: #f8f9ff; }}
-                .top-tickers {{ display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin: 20px 0; }}
-                .ticker-card {{ background: #f8f9ff; padding: 15px; border-radius: 8px; border-left: 4px solid #667eea; }}
-                .ticker-name {{ font-weight: bold; color: #333; font-size: 16px; }}
-                .ticker-count {{ color: #667eea; font-size: 20px; font-weight: bold; }}
-                .progress-bar {{ width: 100%; height: 6px; background: #eee; border-radius: 3px; margin-top: 8px; overflow: hidden; }}
-                .progress-fill {{ height: 100%; background: linear-gradient(90deg, #667eea, #764ba2); }}
-                .footer {{ margin-top: 30px; color: #999; font-size: 12px; text-align: center; padding-top: 20px; border-top: 1px solid #eee; }}
-                .metric-row {{ display: flex; justify-content: space-between; margin: 10px 0; }}
-                .metric-label {{ color: #666; }}
-                .metric-value {{ font-weight: bold; color: #333; }}
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <h1>📈 Reporte Mensual - Señales de Opciones NYSE</h1>
 
-                <p><strong>Período:</strong> {month_ago.strftime('%d de %B, %Y')} a {now.strftime('%d de %B, %Y')}</p>
+def build_monthly(data: dict, cfg: dict, now: datetime, month: str, late: bool) -> tuple[str, str]:
+    d0 = date.fromisoformat(month + "-01")
+    d1 = next_month(d0)
+    a, b = ny_bounds(d0, d1)
+    counts = {ch: len(channel_signals(data, ch, a, b)) for ch, _ in CHANNELS}
+    vl_month = [s for s in data["signals"] if a <= s["timestamp"] < b]
+    ops = data["ops"]
+    opened = [o for o in ops if a <= (o.get("timestamp_entry") or "~") < b]
+    closed_m = [o for o in ops if a <= (o.get("timestamp_exit") or "~") < b]
+    name_of = dict(CHANNELS)
+    alert = ""
+    vl = milestones(data, "VICENTE_LUZ", cfg, now)["stats"]
+    if vl["ret_sin_banco"] is not None and vl["ret_sin_banco"] < cfg["alert_return_threshold"] * 100:
+        alert = (f"<div class='alert'>Vicente Luz: retorno neto sin costo bancario {esc(pct(vl['ret_sin_banco']))} "
+                 f"(umbral de alerta {cfg['alert_return_threshold'] * 100:.0f}%)</div>")
+    late_note = ("<p class='alert'>Reporte enviado con retraso: debía salir el último día del mes. "
+                 "Las cifras están actualizadas a la fecha de generación.</p>") if late else ""
+    body = (
+        late_note + alert
+        + f"<h2>Actividad de {esc(month)}</h2>"
+        + kpis([("Señales válidas Vicente Luz", str(counts["VICENTE_LUZ"])),
+                ("Alertas Gravity Zone", str(counts["GRAVITY_ZONE"])),
+                ("Operaciones abiertas en el mes", str(len(opened))),
+                ("Operaciones cerradas en el mes", str(len(closed_m)))])
+        + "<h3>Señales descartadas en el mes (Vicente Luz)</h3>"
+        + table(["Motivo", "Señales"], discard_rows(vl_month), "Ninguna.")
+        + "<h2>Avance hacia los hitos</h2>" + milestones_html(data, cfg, now)
+        + "<h2>Resultados acumulados</h2>" + results_html(data, cfg)
+        + "<h2>Análisis detallado (operaciones cerradas, acumulado)</h2>"
+        + "<h3>Por canal</h3>" + table(["Canal", "Cerradas", "Neto prom.", "% ganadoras"],
+                                       _group_rows(group_table(ops, lambda o: name_of.get(o["channel"], o["channel"]))),
+                                       "Sin operaciones cerradas.")
+        + "<h3>Por tipo de opción</h3>" + table(["Tipo", "Cerradas", "Neto prom.", "% ganadoras"],
+                                                _group_rows(group_table(ops, lambda o: o["option_type"])),
+                                                "Sin operaciones cerradas.")
+        + "<h3>Por ticker</h3>" + table(["Ticker", "Cerradas", "Neto prom.", "% ganadoras"],
+                                        _group_rows(group_table(ops, lambda o: o["ticker"])),
+                                        "Sin operaciones cerradas.")
+        + nota2_html(data, cfg)
+        + f"<h2>Operaciones abiertas o cerradas en {esc(month)}</h2>"
+        + table(OPS_HEADERS, ops_rows(list({o["id"]: o for o in opened + closed_m}.values())), "Ninguna.")
+    )
+    title = f"Reporte mensual — Testeo de señales — {month}"
+    html = page(title, f"Generado {now:%Y-%m-%d %H:%M} UTC" + (" · enviado con retraso" if late else ""), body)
+    lines = [title + (" (enviado con retraso)" if late else "")]
+    for ch, name in CHANNELS:
+        m = milestones(data, ch, cfg, now)
+        st = m["stats"]
+        lines.append(f"{name}: {counts[ch]} señales en el mes, {m['n']} acumuladas; {st['n_closed']} cerradas; "
+                     f"retorno neto con costo bancario {pct(st['ret_con_banco'])}")
+    lines.append("Dinero ficticio. Esto es análisis de datos, no asesoría financiera.")
+    return html, "\n".join(lines)
 
-                <div class="stats">
-                    <div class="stat-box">
-                        <div class="stat-value">{total}</div>
-                        <div class="stat-label">Señales Totales</div>
-                    </div>
-                    <div class="stat-box calls">
-                        <div class="stat-value">{calls}</div>
-                        <div class="stat-label">CALLS ({call_pct:.0f}%)</div>
-                    </div>
-                    <div class="stat-box puts">
-                        <div class="stat-value">{puts}</div>
-                        <div class="stat-label">PUTS ({put_pct:.0f}%)</div>
-                    </div>
-                    <div class="stat-box">
-                        <div class="stat-value">{len(tickers)}</div>
-                        <div class="stat-label">Tickers Únicos</div>
-                    </div>
-                    <div class="stat-box">
-                        <div class="stat-value">{len(daily_stats)}</div>
-                        <div class="stat-label">Días Activos</div>
-                    </div>
-                </div>
 
-                <h2>🎯 Top 10 Tickers</h2>
-                <div class="top-tickers">
-        """
-
-        sorted_tickers = sorted(tickers.items(), key=lambda x: x[1], reverse=True)[:10]
-        max_count = sorted_tickers[0][1] if sorted_tickers else 1
-
-        for i, (ticker, count) in enumerate(sorted_tickers):
-            if i % 2 == 0 and i > 0:
-                html_content += "</div><div class='top-tickers'>"
-
-            pct_width = (count / max_count) * 100
-            html_content += f"""
-                    <div class="ticker-card">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span class="ticker-name">#{i+1} {ticker}</span>
-                            <span class="ticker-count">{count}</span>
-                        </div>
-                        <div class="progress-bar">
-                            <div class="progress-fill" style="width: {pct_width}%"></div>
-                        </div>
-                    </div>
-            """
-
-        html_content += """
-                </div>
-
-                <h2>📊 Distribución Diaria</h2>
-                <table>
-                    <tr>
-                        <th>Fecha</th>
-                        <th>Total</th>
-                        <th>CALLS</th>
-                        <th>PUTS</th>
-                        <th>Ratio C/P</th>
-                    </tr>
-        """
-
-        for day in sorted(daily_stats.keys(), reverse=True)[:10]:
-            stats = daily_stats[day]
-            ratio = f"{stats['calls']}/{stats['puts']}" if stats['puts'] > 0 else f"{stats['calls']}/0"
-            html_content += f"""
-                    <tr>
-                        <td>{day}</td>
-                        <td><strong>{stats['total']}</strong></td>
-                        <td><span style="color: #00aa00;">●</span> {stats['calls']}</td>
-                        <td><span style="color: #cc0000;">●</span> {stats['puts']}</td>
-                        <td>{ratio}</td>
-                    </tr>
-            """
-
-        html_content += """
-                </table>
-
-                <h2>📌 Resumen Ejecutivo</h2>
-                <div style="background: #f8f9ff; padding: 15px; border-radius: 8px;">
-        """
-
-        avg_daily = total / len(daily_stats) if daily_stats else 0
-        html_content += f"""
-                    <div class="metric-row">
-                        <span class="metric-label">Promedio de señales por día:</span>
-                        <span class="metric-value">{avg_daily:.1f}</span>
-                    </div>
-                    <div class="metric-row">
-                        <span class="metric-label">Ratio CALL/PUT:</span>
-                        <span class="metric-value">{call_pct:.1f}% / {put_pct:.1f}%</span>
-                    </div>
-                    <div class="metric-row">
-                        <span class="metric-label">Ticker más activo:</span>
-                        <span class="metric-value">{sorted_tickers[0][0] if sorted_tickers else 'N/A'} ({sorted_tickers[0][1] if sorted_tickers else 0} señales)</span>
-                    </div>
-                </div>
-
-                <div class="footer">
-                    <p>Reporte generado automáticamente por Señales Bolsa Trading</p>
-                    <p>© 2026 - Análisis avanzado de opciones NYSE en tiempo real</p>
-                    <p>Próximo reporte: {(now + timedelta(days=30)).strftime('%d de %B, %Y')}</p>
-                </div>
-            </div>
-        </body>
-        </html>
-        """
-
-        # Guardar HTML
-        report_dir = Path("reports")
-        report_dir.mkdir(exist_ok=True)
-        report_file = report_dir / f"monthly_report_{now.strftime('%Y-%m')}.html"
-        report_file.write_text(html_content)
-
-        # Enviar email
-        smtp_host = os.getenv("SMTP_HOST")
-        smtp_user = os.getenv("SMTP_USER")
-        smtp_pass = os.getenv("SMTP_PASS")
-        alert_email = os.getenv("ALERT_EMAIL_TO")
-
-        if all([smtp_host, smtp_user, smtp_pass, alert_email]):
-            import smtplib
-            from email.mime.text import MIMEText
-            from email.mime.multipart import MIMEMultipart
-
-            try:
-                msg = MIMEMultipart("alternative")
-                msg["Subject"] = f"📈 Reporte Mensual - Señales ({now.strftime('%B %Y')})"
-                msg["From"] = smtp_user
-                msg["To"] = alert_email
-
-                msg.attach(MIMEText(html_content, "html"))
-
-                with smtplib.SMTP_SSL(smtp_host, 465) as server:
-                    server.login(smtp_user, smtp_pass)
-                    server.sendmail(smtp_user, alert_email, msg.as_string())
-
-                log_event(f"Script 7: Reporte mensual enviado a {alert_email}")
-            except Exception as e:
-                log_event(f"Script 7: Error al enviar email: {e}", "ERROR")
-        else:
-            log_event("Script 7: Credenciales SMTP incompletas, reporte no enviado", "WARNING")
-
-        log_event(f"Script 7: Reporte mensual generado ({total} señales)")
-        return 0
-
-    except Exception as e:
-        log_event(f"Script 7 falló: {type(e).__name__}: {e}", "ERROR")
+def main() -> int:
+    cfg = get_config()
+    state = load_state()
+    if state.get("parser_version") != PARSER_VERSION:
+        log_event("Script 7: las señales aun no se reprocesaron con el parser v2; no envio un reporte "
+                  "con datos de la version 1", "ERROR")
         return 1
+    now = now_utc()
+    forced = None
+    if "--month" in sys.argv:
+        forced = sys.argv[sys.argv.index("--month") + 1].strip()
+    elif os.getenv("REPORT_MONTH", "").strip():
+        forced = os.getenv("REPORT_MONTH").strip()
+    if forced:
+        date.fromisoformat(forced + "-01")  # valida AAAA-MM
+    sent = set(load_state(REPORT_STATE_PATH).get("monthly_sent", []))
+    todo = months_to_send(now.astimezone(NY).date(), sent, cfg["capture_start"], forced)
+    if not todo:
+        log_event("Script 7: hoy no corresponde reporte mensual")
+        return 0
+    data = load_data()
+    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    for month, late in todo:
+        html, text = build_monthly(data, cfg, now, month, late)
+        (REPORTS_DIR / f"monthly_report_{month}.html").write_text(html, encoding="utf-8")
+        (REPORTS_DIR / "report_monthly.html").write_text(html, encoding="utf-8")
+        if send_email(f"Reporte mensual — señales ({month})" + (" [tardío]" if late else ""), text, html):
+            sent.add(month)
+            update_state(REPORT_STATE_PATH, monthly_sent=sorted(sent))
+        log_event(f"Script 7: reporte mensual {month} generado" + (" (tardio)" if late else ""))
+    return 0
+
 
 if __name__ == "__main__":
-    sys.exit(generate_monthly_report())
+    try:
+        sys.exit(main())
+    except Exception as e:
+        log_event(f"Script 7 fallo: {type(e).__name__}: {e}", "ERROR")
+        sys.exit(1)
