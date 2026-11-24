@@ -648,3 +648,11 @@
 2026-11-24 20:14:07,902 [INFO] Script 4: 156 operaciones {'closed': 144, 'open': 12}; 0 congeladas; 0 con error
 2026-11-24 20:14:07,992 [INFO] Script 5: hitos.md sin cambios; Vicente Luz: 153 señales
 2026-11-24 20:14:08,056 [INFO] Script 8: 47 aciertos historicos de Vicente marcados sin enviar
+2026-11-24 23:52:08,664 [INFO] Script 0: lista de simbolos al dia; sin descarga
+2026-11-24 23:52:09,424 [WARNING] No pude resolver 'alertas_bolsa_vicente_luz' (ValueError); busco por titulo en tus dialogos
+2026-11-24 23:52:09,666 [INFO] Canal encontrado por titulo: Alertas de Bolsa de Valores Vicente Luz
+2026-11-24 23:52:10,737 [INFO] Script 1: 11 mensajes nuevos, 1 señales validas (3 descartadas)
+2026-11-24 23:52:10,857 [INFO] Script 2: Gravity Zone suspendido (docs/ADENDA-02-GRAVITY.md); sin evaluacion
+2026-11-24 23:52:10,974 [INFO] Script 3: mercado cerrado y descarga reciente; sin descarga
+2026-11-24 23:52:13,241 [INFO] Script 4: 157 operaciones {'closed': 144, 'open': 12, 'pending': 1}; 31 congeladas; 0 con error
+2026-11-24 23:52:13,367 [INFO] Script 5: hitos.md actualizado; Vicente Luz: 154 señales

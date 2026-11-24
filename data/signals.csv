@@ -350,3 +350,7 @@ timestamp,ticker,signal_type,option_type,strike_type,price_recommended,channel,m
 2026-11-23 20:49:23,XRT,CALL,OTM,95%,2.26,VICENTE_LUZ,74239,VL-74239-XRT-C,valida,,,89.5,2026-12-18,1,0,4,minusculas,
 2026-11-23 20:50:44,MCD,CALL,OTM,95%,1.62,VICENTE_LUZ,74240,VL-74240-MCD-C,valida,,,282.5,2026-12-04,1,0,4,minusculas,
 2026-11-23 20:52:03,NOW,CALL,OTM,95%,,VICENTE_LUZ,74241,VL-74241-NOW-C,descartada,sin_estructura,,,,1,0,4,cashtag,
+2026-11-24 20:15:34,BABA,CALL,OTM,95%,1.48,VICENTE_LUZ,74271,VL-74271-BABA-C,descartada,repeticion,VL-74230-BABA-C,95,2026-12-18,1,0,4,minusculas,
+2026-11-24 20:15:37,AMZN,CALL,OTM,95%,,VICENTE_LUZ,74272,VL-74272-AMZN-C,descartada,repeticion,VL-74214-AMZN-C,280,2026-12-04,1,0,4,minusculas,
+2026-11-24 20:28:13,NOW,CALL,OTM,95%,,VICENTE_LUZ,74275,VL-74275-NOW-C,descartada,sin_estructura,,,,1,0,4,cashtag,
+2026-11-24 20:48:42,META,CALL,OTM,95%,8.65,VICENTE_LUZ,74277,VL-74277-META-C,valida,,,615,2026-12-04,1,0,4,minusculas,
