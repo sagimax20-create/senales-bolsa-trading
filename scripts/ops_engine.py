@@ -139,8 +139,9 @@ def evaluate(cand: dict, bars: list[dict], daily: list[dict], cfg: dict, now: da
 
 
 def build_candidates(signals: list[dict], gravity: list[dict], cfg: dict) -> list[dict]:
-    """Señales que abren operacion: Vicente Luz validas (universo ampliado, ADENDA-01) y
-    alertas de Gravity Zone (8 tickers originales)."""
+    """Señales que abren operacion: Vicente Luz validas (universo ampliado, ADENDA-01) y, si el
+    canal esta activo, alertas de Gravity Zone (8 tickers). Gravity Zone se suspendio el
+    2026-11-24 (ADENDA-02): gravity_enabled = false en config.json."""
     start = cfg["capture_start"] + " 00:00:00"
     allowed = set(cfg["allowed_tickers"])
     out = []
@@ -150,7 +151,7 @@ def build_candidates(signals: list[dict], gravity: list[dict], cfg: dict) -> lis
         out.append({"ts": r["timestamp"], "ticker": r["ticker"], "type": r["signal_type"], "channel": r["channel"],
                     "key": f"{r['channel']}|{r['signal_id']}", "signal_id": r["signal_id"],
                     "message_id": r["message_id"], "original": "1" if r["ticker"] in allowed else "0"})
-    for r in gravity:
+    for r in (gravity if cfg.get("gravity_enabled", True) else []):
         if r["ticker"] not in allowed or r["signal_type"] not in ("CALL", "PUT") or r["timestamp"] < start:
             continue
         out.append({"ts": r["timestamp"], "ticker": r["ticker"], "type": r["signal_type"], "channel": r["channel"],

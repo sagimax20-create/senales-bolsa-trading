@@ -17,6 +17,9 @@ dia; la hora de la alerta es el cierre (16:00 Nueva York) y la entrada en papel 
 siguiente. La primera corrida respalda gravity_alerts.csv (v1) y lo reconstruye.
 
 Tickers: los 8 del protocolo (allowed_tickers). Escribe data/gravity_alerts.csv.
+
+SUSPENDIDO desde el 2026-11-24 (docs/ADENDA-02-GRAVITY.md): con gravity_enabled = false en
+config.json no evalua nada; data/gravity_alerts.csv queda como historico.
 """
 from __future__ import annotations
 
@@ -101,6 +104,9 @@ def refresh_daily(ticker: str, until: date, fetcher=get_daily_history) -> list[d
 
 def main() -> int:
     cfg = get_config()
+    if not cfg.get("gravity_enabled", True):
+        log_event("Script 2: Gravity Zone suspendido (docs/ADENDA-02-GRAVITY.md); sin evaluacion")
+        return 0
     now = now_utc()
     state = load_state()
     start = date.fromisoformat(cfg["capture_start"])

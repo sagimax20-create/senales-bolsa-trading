@@ -102,6 +102,7 @@ DEFAULT_CONFIG = {
     "symbols_max_age_days": 7,
     "price_offhours_min_interval_hours": 4,
     "risk_free_rate": 0.045,
+    "gravity_enabled": True,
     "gravity_call_level": -2.0,
     "gravity_put_level": 2.0,
     "gravity_lookback_days": 20,

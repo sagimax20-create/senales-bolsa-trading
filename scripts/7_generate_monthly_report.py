@@ -19,7 +19,7 @@ from datetime import date, datetime, timedelta
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common_utils import (NY, REPORT_STATE_PATH, REPORTS_DIR, get_config, load_state, log_event,  # noqa: E402
                           now_utc, send_email, update_state)
-from report_lib import (CHANNELS, OPS_HEADERS, channel_signals, discard_rows, esc, group_table,  # noqa: E402
+from report_lib import (channels, OPS_HEADERS, channel_signals, discard_rows, esc, group_table,  # noqa: E402
                         kpis, load_data, milestones, milestones_html, nota2_html, ny_bounds, ops_rows,
                         page, pct, results_html, table, td_pct)
 from signal_parser import PARSER_VERSION  # noqa: E402
@@ -57,12 +57,12 @@ def build_monthly(data: dict, cfg: dict, now: datetime, month: str, late: bool) 
     d0 = date.fromisoformat(month + "-01")
     d1 = next_month(d0)
     a, b = ny_bounds(d0, d1)
-    counts = {ch: len(channel_signals(data, ch, a, b)) for ch, _ in CHANNELS}
+    counts = {ch: len(channel_signals(data, ch, a, b)) for ch, _ in channels(cfg)}
     vl_month = [s for s in data["signals"] if a <= s["timestamp"] < b]
     ops = data["ops"]
     opened = [o for o in ops if a <= (o.get("timestamp_entry") or "~") < b]
     closed_m = [o for o in ops if a <= (o.get("timestamp_exit") or "~") < b]
-    name_of = dict(CHANNELS)
+    name_of = dict(channels(cfg))
     alert = ""
     vl = milestones(data, "VICENTE_LUZ", cfg, now)["stats"]
     if vl["ret_sin_banco"] is not None and vl["ret_sin_banco"] < cfg["alert_return_threshold"] * 100:
@@ -73,9 +73,9 @@ def build_monthly(data: dict, cfg: dict, now: datetime, month: str, late: bool) 
     body = (
         late_note + alert
         + f"<h2>Actividad de {esc(month)}</h2>"
-        + kpis([("Señales válidas Vicente Luz", str(counts["VICENTE_LUZ"])),
-                ("Alertas Gravity Zone", str(counts["GRAVITY_ZONE"])),
-                ("Operaciones abiertas en el mes", str(len(opened))),
+        + kpis([("Señales válidas Vicente Luz", str(counts["VICENTE_LUZ"]))]
+               + ([("Alertas Gravity Zone", str(counts["GRAVITY_ZONE"]))] if "GRAVITY_ZONE" in counts else [])
+               + [("Operaciones abiertas en el mes", str(len(opened))),
                 ("Operaciones cerradas en el mes", str(len(closed_m)))])
         + "<h3>Señales descartadas en el mes (Vicente Luz)</h3>"
         + table(["Motivo", "Señales"], discard_rows(vl_month), "Ninguna.")
@@ -98,7 +98,7 @@ def build_monthly(data: dict, cfg: dict, now: datetime, month: str, late: bool) 
     title = f"Reporte mensual — Testeo de señales — {month}"
     html = page(title, f"Generado {now:%Y-%m-%d %H:%M} UTC" + (" · enviado con retraso" if late else ""), body)
     lines = [title + (" (enviado con retraso)" if late else "")]
-    for ch, name in CHANNELS:
+    for ch, name in channels(cfg):
         m = milestones(data, ch, cfg, now)
         st = m["stats"]
         lines.append(f"{name}: {counts[ch]} señales en el mes, {m['n']} acumuladas; {st['n_closed']} cerradas; "
@@ -127,7 +127,7 @@ def main() -> int:
     if not todo:
         log_event("Script 7: hoy no corresponde reporte mensual")
         return 0
-    data = load_data()
+    data = load_data(cfg)
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     for month, late in todo:
         html, text = build_monthly(data, cfg, now, month, late)
