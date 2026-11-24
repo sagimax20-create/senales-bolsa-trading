@@ -70,3 +70,28 @@ Para activarlo:
 4. En GitHub, ve a Settings → Secrets and variables → Actions → New repository secret, y crea `TELEGRAM_BOT_TOKEN` (el token) y `TELEGRAM_CHAT_ID` (el número).
 
 En la siguiente corrida del monitor llega un mensaje de bienvenida. Desde ahí llegan solo los niveles nuevos; el histórico está en el reporte semanal.
+
+## Bot con comandos (Render)
+
+`bot/server.py` responde a lo que le escribes al bot. Comandos:
+
+| Comando | Respuesta |
+|---|---|
+| `/estado` | Señales válidas, avance hacia 100 y 300, operaciones y retorno neto con y sin costo bancario |
+| `/abiertas` | Operaciones abiertas: entrada, strike, retorno actual, nivel máximo alcanzado y distancia al strike |
+| `/niveles` | Últimos niveles +25/+50/+75/+100%, con distancia al strike del protocolo y al de Vicente |
+| `/senales` (o `/señales`) | Últimas señales válidas de Vicente Luz y descartes de la semana |
+| `/aciertos` | Tickers con más aciertos: % de take-profit y % que llegó al strike (mínimo 2 operaciones) |
+| `/ayuda` | Lista de comandos |
+
+- Responde **solo** al chat `TELEGRAM_CHAT_ID`; a cualquier otro chat no le contesta.
+- Lee los datos públicos del repo (los que deja el monitor) y usa las mismas cuentas que los reportes.
+
+**Despliegue, una sola vez:**
+
+1. Entra a <https://render.com/deploy?repo=https://github.com/sagimax20-create/senales-bolsa-trading>. Render lee `render.yaml` y crea el servicio `senales-bot` en el plan gratuito.
+2. Render te pide `TELEGRAM_BOT_TOKEN` y `TELEGRAM_CHAT_ID`: son los mismos valores que pusiste en GitHub. `WEBHOOK_SECRET` lo genera Render.
+3. Espera a que termine el despliegue, unos 2 minutos. El servidor registra el webhook y la lista de comandos solo; luego escríbele `/ayuda` al bot.
+
+El plan gratuito "duerme" el servicio después de 15 minutos sin uso, así que la primera respuesta después de un rato puede tardar hasta un minuto. Al registrarse el webhook, la dirección `getUpdates` deja de funcionar; ya no hace falta, porque el chat id está guardado.
+

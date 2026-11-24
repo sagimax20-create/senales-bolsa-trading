@@ -5,7 +5,7 @@ on:
   pull_request:
   push:
     branches-ignore: [main]
-    paths: ['scripts/**', 'tests/**', 'config.json', 'data/ref/**', '.github/workflows/tests.yml']
+    paths: ['scripts/**', 'bot/**', 'tests/**', 'config.json', 'data/ref/**', '.github/workflows/tests.yml']
   workflow_dispatch:
 
 permissions:

@@ -2,6 +2,24 @@
 
 Esta bitácora registra las correcciones al código que implementa el protocolo y las interpretaciones de lo que el protocolo no define. `PROTOCOLO.md` no cambia; su huella SHA-256 está en [`PROTOCOLO.sha256`](../PROTOCOLO.sha256). Los cambios al protocolo mismo van en adendas: [`ADENDA-01-UNIVERSO.md`](ADENDA-01-UNIVERSO.md).
 
+## 2026-11-24 — Bot con comandos en Render
+
+Pedido del responsable del protocolo: consultar el testeo escribiéndole al bot. Comandos: `/estado`, `/abiertas`, `/niveles`, `/senales` (acepta `/señales`), `/aciertos` y `/ayuda`.
+
+- **`bot/commands.py`.** Arma las respuestas en texto plano, con las mismas funciones que los reportes.
+- **`bot/server.py`.** Servidor con solo librería estándar:
+  - recibe los mensajes por webhook en `/telegram`;
+  - verifica la cabecera secreta, que es la huella SHA-256 en hexadecimal de `WEBHOOK_SECRET`, porque Telegram no acepta base64;
+  - responde solo a `TELEGRAM_CHAT_ID`;
+  - baja los datos públicos del repo como mucho cada 2 minutos.
+- **`render.yaml`.** Servicio web gratuito; el token y el chat id los pone el usuario en Render. Solo se redespliega si cambian `bot/`, `scripts/` o `render.yaml`, así que los commits de datos del monitor no lo redespliegan.
+- **`/aciertos`.** Para cada ticker con 2 o más operaciones cerradas muestra:
+  - % de take-profit;
+  - cuántas veces el subyacente pasó el strike del protocolo en los 45 días;
+  - el neto promedio.
+
+  Con pocas operaciones por ticker, el porcentaje no es confiable.
+
 ## 2026-11-24 — Niveles de ganancia +25/+50/+75/+100% y avisos por Telegram
 
 Pedido del responsable del protocolo: saber si se ganó llegando al strike o cerca de él. Es **análisis** (§10 nota 2) y no cambia la regla oficial (cierre en +50%).

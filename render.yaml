@@ -1,0 +1,28 @@
+# Bot de Telegram con comandos (bot/server.py) en Render, plan gratuito.
+# Despliegue: https://render.com/deploy?repo=https://github.com/sagimax20-create/senales-bolsa-trading
+# Render pide TELEGRAM_BOT_TOKEN y TELEGRAM_CHAT_ID en su formulario (sync: false): no van en el repo.
+services:
+  - type: web
+    name: senales-bot
+    runtime: python
+    plan: free
+    buildCommand: echo "sin dependencias externas"
+    startCommand: python bot/server.py
+    healthCheckPath: /
+    autoDeploy: true
+    buildFilter:
+      paths:
+        - bot/**
+        - scripts/**
+        - render.yaml
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+      - key: WEBHOOK_SECRET
+        generateValue: true
+      - key: DATA_BASE_URL
+        value: https://raw.githubusercontent.com/sagimax20-create/senales-bolsa-trading/main
