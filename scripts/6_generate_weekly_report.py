@@ -1,179 +1,118 @@
-"""Script 6 — Generador de Reporte Semanal.
+"""Script 6 — Reporte semanal (PROTOCOLO §9: cada lunes; resumen de señales, retorno
+acumulado y operaciones abiertas).
 
-Agrega datos de los últimos 7 días, genera un reporte HTML y envía por email.
-Se ejecuta cada viernes a las 4:00 PM ET (cierre de NYSE).
-
-Credenciales:
-  SMTP_HOST, SMTP_USER, SMTP_PASS, ALERT_EMAIL_TO (requeridas)
+Cubre la ultima semana completa, de lunes a domingo en hora de Nueva York. Contenido:
+  1. Señales validas acumuladas frente a los hitos 100 y 300, por canal.
+  2. Señales de la semana: validas y descartadas por motivo.
+  3. Operaciones abiertas, cerradas y pendientes.
+  4. Resultado por regla de salida y retorno neto con comision y con costo bancario.
+  5. Tabla de las operaciones de la semana (abiertas o cerradas en la semana).
+  6. Operaciones abiertas hoy.
+Escribe reports/weekly_report_<lunes del envio>.html y reports/report_weekly.html (el ultimo),
+y lo envia por correo una sola vez por semana (data/report_state.json -> weekly_sent).
+Opciones: --week AAAA-MM-DD (lunes de la semana a reportar), --force (reenviar).
+Credenciales: SMTP_HOST, SMTP_USER, SMTP_PASS, ALERT_EMAIL_TO.
 """
+from __future__ import annotations
+
 import os
 import sys
-from datetime import datetime, timedelta
-from pathlib import Path
+from datetime import date, datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common_utils import get_config, load_csv, log_event, SIGNALS_CSV, SIGNALS_COLS
+from common_utils import (NY, REPORT_STATE_PATH, REPORTS_DIR, get_config, load_state, log_event,  # noqa: E402
+                          now_utc, send_email, update_state)
+from report_lib import (CHANNELS, OPS_HEADERS, channel_signals, discard_rows, kpis, load_data,  # noqa: E402
+                        milestones, milestones_html, nota2_html, ny_bounds, ops_rows, page, pct,
+                        results_html, summarize, table)
+from signal_parser import PARSER_VERSION  # noqa: E402
 
-def generate_weekly_report() -> int:
-    """Genera reporte semanal y lo envía por email."""
-    try:
-        cfg = get_config()
 
-        # Leer datos
-        signals = load_csv(SIGNALS_CSV, SIGNALS_COLS)
+def last_complete_week(now: datetime) -> tuple[date, date]:
+    """(lunes, lunes siguiente) de la ultima semana completa en hora de Nueva York."""
+    today = now.astimezone(NY).date()
+    this_monday = today - timedelta(days=today.weekday())
+    return this_monday - timedelta(days=7), this_monday
 
-        if not signals:
-            log_event("Script 6: Sin señales esta semana", "WARNING")
-            return 0
 
-        # Filtrar últimos 7 días
-        now = datetime.utcnow()
-        week_ago = now - timedelta(days=7)
+def build_weekly(data: dict, cfg: dict, now: datetime, d0: date, d1: date) -> tuple[str, str]:
+    a, b = ny_bounds(d0, d1)
+    week_counts = {ch: len(channel_signals(data, ch, a, b)) for ch, _ in CHANNELS}
+    vl_week = [s for s in data["signals"] if a <= s["timestamp"] < b]
+    msgs_week = [m for m in data["messages"] if a <= m["timestamp"] < b]
+    ops = data["ops"]
+    st_all = summarize(ops, cfg)
+    week_ops = [o for o in ops if a <= (o.get("timestamp_entry") or "~") < b or a <= (o.get("timestamp_exit") or "~") < b]
+    open_ops = [o for o in ops if o["estado"] == "open"]
+    period = f"{d0:%d-%m-%Y} al {d1 - timedelta(days=1):%d-%m-%Y}"
+    body = (
+        f"<h2>Resumen de la semana del {period}</h2>"
+        + kpis([("Señales válidas Vicente Luz (semana)", str(week_counts["VICENTE_LUZ"])),
+                ("Alertas Gravity Zone (semana)", str(week_counts["GRAVITY_ZONE"])),
+                ("Mensajes leídos (semana)", str(len(msgs_week))),
+                ("Operaciones abiertas", str(st_all["n_open"])),
+                ("Operaciones cerradas (acumulado)", str(st_all["n_closed"])),
+                ("Pendientes / sin precio", f"{st_all['n_pending']} / {st_all['n_sin_precio']}")])
+        + "<h2>Avance hacia los hitos</h2>" + milestones_html(data, cfg, now, week_counts)
+        + "<h2>Señales descartadas esta semana (Vicente Luz)</h2>"
+        + table(["Motivo", "Señales"], discard_rows(vl_week), "Ninguna.")
+        + "<p class='muted'>Además de estas, los mensajes sin ticker válido o sin call/put no generan señal "
+          "(ver data/messages.csv).</p>"
+        + "<h2>Resultados</h2>" + results_html(data, cfg)
+        + f"<h2>Operaciones de la semana ({len(week_ops)})</h2>"
+        + table(OPS_HEADERS, ops_rows(week_ops), "Ninguna operación abrió ni cerró esta semana.")
+        + f"<h2>Operaciones abiertas hoy ({len(open_ops)})</h2>"
+        + "<p class='muted'>El retorno de una operación abierta es provisional (marcado a mercado con el modelo).</p>"
+        + table(OPS_HEADERS, ops_rows(open_ops), "No hay operaciones abiertas.")
+        + nota2_html(data, cfg)
+    )
+    title = "Reporte semanal — Testeo de señales"
+    html = page(title, f"Semana del {period} · generado {now:%Y-%m-%d %H:%M} UTC", body)
+    lines = [f"{title} — semana del {period}"]
+    for ch, name in CHANNELS:
+        m = milestones(data, ch, cfg, now)
+        st = m["stats"]
+        lines.append(f"{name}: {week_counts[ch]} señales esta semana, {m['n']} acumuladas "
+                     f"(alarma {m['n']}/{m['alarm']}, decisión {m['n']}/{m['final']}); "
+                     f"{st['n_closed']} cerradas, {st['n_open']} abiertas; retorno neto con costo bancario "
+                     f"{pct(st['ret_con_banco'])}")
+    lines.append(f"Operaciones de la semana: {len(week_ops)}. Detalle en la versión HTML.")
+    lines.append("Dinero ficticio. Esto es análisis de datos, no asesoría financiera.")
+    return html, "\n".join(lines)
 
-        weekly_signals = []
-        for s in signals:
-            try:
-                ts = datetime.fromisoformat(s["timestamp"].replace("Z", "+00:00"))
-                if ts >= week_ago:
-                    weekly_signals.append(s)
-            except (ValueError, KeyError):
-                continue
 
-        # Estadísticas
-        total = len(weekly_signals)
-        calls = sum(1 for s in weekly_signals if s.get("signal_type") == "CALL")
-        puts = sum(1 for s in weekly_signals if s.get("signal_type") == "PUT")
-
-        tickers = {}
-        for s in weekly_signals:
-            t = s.get("ticker", "UNKNOWN")
-            tickers[t] = tickers.get(t, 0) + 1
-
-        top_ticker = max(tickers.items(), key=lambda x: x[1])[0] if tickers else "N/A"
-
-        # Generar HTML
-        html_content = f"""
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <title>Reporte Semanal - Señales de Bolsa</title>
-            <style>
-                body {{ font-family: Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }}
-                .container {{ background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
-                h1 {{ color: #333; border-bottom: 3px solid #0066cc; padding-bottom: 10px; }}
-                .stats {{ display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin: 20px 0; }}
-                .stat-box {{ background: #f0f7ff; padding: 15px; border-radius: 5px; text-align: center; border-left: 4px solid #0066cc; }}
-                .stat-value {{ font-size: 28px; font-weight: bold; color: #0066cc; }}
-                .stat-label {{ color: #666; margin-top: 5px; }}
-                .calls {{ border-left-color: #00aa00; }}
-                .calls .stat-value {{ color: #00aa00; }}
-                .puts {{ border-left-color: #cc0000; }}
-                .puts .stat-value {{ color: #cc0000; }}
-                table {{ width: 100%; border-collapse: collapse; margin: 20px 0; }}
-                th {{ background: #0066cc; color: white; padding: 12px; text-align: left; }}
-                td {{ padding: 10px; border-bottom: 1px solid #ddd; }}
-                tr:hover {{ background: #f9f9f9; }}
-                .footer {{ margin-top: 20px; color: #999; font-size: 12px; text-align: center; }}
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <h1>📊 Reporte Semanal - Señales de Opciones</h1>
-
-                <p><strong>Período:</strong> {week_ago.strftime('%Y-%m-%d')} a {now.strftime('%Y-%m-%d')}</p>
-
-                <div class="stats">
-                    <div class="stat-box">
-                        <div class="stat-value">{total}</div>
-                        <div class="stat-label">Señales Totales</div>
-                    </div>
-                    <div class="stat-box calls">
-                        <div class="stat-value">{calls}</div>
-                        <div class="stat-label">CALLS</div>
-                    </div>
-                    <div class="stat-box puts">
-                        <div class="stat-value">{puts}</div>
-                        <div class="stat-label">PUTS</div>
-                    </div>
-                    <div class="stat-box">
-                        <div class="stat-value">{top_ticker}</div>
-                        <div class="stat-label">Ticker Principal</div>
-                    </div>
-                </div>
-
-                <h2>📈 Top Tickers</h2>
-                <table>
-                    <tr>
-                        <th>Ticker</th>
-                        <th>Cantidad de Señales</th>
-                        <th>Porcentaje</th>
-                    </tr>
-        """
-
-        sorted_tickers = sorted(tickers.items(), key=lambda x: x[1], reverse=True)[:5]
-        for ticker, count in sorted_tickers:
-            pct = (count / total * 100) if total > 0 else 0
-            html_content += f"""
-                    <tr>
-                        <td><strong>{ticker}</strong></td>
-                        <td>{count}</td>
-                        <td>{pct:.1f}%</td>
-                    </tr>
-            """
-
-        html_content += """
-                </table>
-
-                <div class="footer">
-                    <p>Reporte generado automáticamente por Señales Bolsa Trading</p>
-                    <p>© 2026 - Análisis de opciones NYSE en tiempo real</p>
-                </div>
-            </div>
-        </body>
-        </html>
-        """
-
-        # Guardar HTML
-        report_dir = Path("reports")
-        report_dir.mkdir(exist_ok=True)
-        report_file = report_dir / f"weekly_report_{now.strftime('%Y-%m-%d')}.html"
-        report_file.write_text(html_content)
-
-        # Enviar email
-        smtp_host = os.getenv("SMTP_HOST")
-        smtp_user = os.getenv("SMTP_USER")
-        smtp_pass = os.getenv("SMTP_PASS")
-        alert_email = os.getenv("ALERT_EMAIL_TO")
-
-        if all([smtp_host, smtp_user, smtp_pass, alert_email]):
-            import smtplib
-            from email.mime.text import MIMEText
-            from email.mime.multipart import MIMEMultipart
-
-            try:
-                msg = MIMEMultipart("alternative")
-                msg["Subject"] = f"📊 Reporte Semanal - Señales ({now.strftime('%Y-%m-%d')})"
-                msg["From"] = smtp_user
-                msg["To"] = alert_email
-
-                msg.attach(MIMEText(html_content, "html"))
-
-                with smtplib.SMTP_SSL(smtp_host, 465) as server:
-                    server.login(smtp_user, smtp_pass)
-                    server.sendmail(smtp_user, alert_email, msg.as_string())
-
-                log_event(f"Script 6: Reporte semanal enviado a {alert_email}")
-            except Exception as e:
-                log_event(f"Script 6: Error al enviar email: {e}", "ERROR")
-        else:
-            log_event("Script 6: Credenciales SMTP incompletas, reporte no enviado", "WARNING")
-
-        log_event(f"Script 6: Reporte semanal generado ({total} señales)")
-        return 0
-
-    except Exception as e:
-        log_event(f"Script 6 falló: {type(e).__name__}: {e}", "ERROR")
+def main() -> int:
+    cfg = get_config()
+    state = load_state()
+    if state.get("parser_version") != PARSER_VERSION:
+        log_event("Script 6: las señales aun no se reprocesaron con el parser v2; no envio un reporte "
+                  "con datos de la version 1", "ERROR")
         return 1
+    now = now_utc()
+    d0, d1 = last_complete_week(now)
+    if "--week" in sys.argv:
+        d0 = date.fromisoformat(sys.argv[sys.argv.index("--week") + 1])
+        d0 -= timedelta(days=d0.weekday())
+        d1 = d0 + timedelta(days=7)
+    week_id = d0.isoformat()
+    sent = set(load_state(REPORT_STATE_PATH).get("weekly_sent", []))
+    if week_id in sent and "--force" not in sys.argv:
+        log_event(f"Script 6: semana {week_id} ya enviada; nada que hacer")
+        return 0
+    html, text = build_weekly(load_data(), cfg, now, d0, d1)
+    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    (REPORTS_DIR / f"weekly_report_{d1.isoformat()}.html").write_text(html, encoding="utf-8")
+    (REPORTS_DIR / "report_weekly.html").write_text(html, encoding="utf-8")
+    subject = f"Reporte semanal — señales ({d0:%d-%m} al {d1 - timedelta(days=1):%d-%m-%Y})"
+    if send_email(subject, text, html):
+        update_state(REPORT_STATE_PATH, weekly_sent=sorted(sent | {week_id}))
+    log_event(f"Script 6: reporte semanal {week_id} generado")
+    return 0
+
 
 if __name__ == "__main__":
-    sys.exit(generate_weekly_report())
+    try:
+        sys.exit(main())
+    except Exception as e:
+        log_event(f"Script 6 fallo: {type(e).__name__}: {e}", "ERROR")
+        sys.exit(1)
