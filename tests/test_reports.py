@@ -234,6 +234,39 @@ class GravityTest(unittest.TestCase):
         self.assertEqual(G2.daily_alerts("GLD", rows, CFG, d + timedelta(days=1), d + timedelta(days=5)), [])
 
 
+class GravitySuspendedTest(unittest.TestCase):
+    """ADENDA-02: Gravity Zone suspendido el 2026-11-24; solo se testea Vicente Luz."""
+
+    OFF = dict(CFG, gravity_enabled=False)
+
+    def data(self):
+        d = sample_data()
+        d["gravity_hist"] = [o for o in d["ops"] if o["channel"] == "GRAVITY_ZONE"]
+        d["ops"] = [o for o in d["ops"] if o["channel"] != "GRAVITY_ZONE"]
+        return d
+
+    def test_no_gravity_candidates(self):
+        from ops_engine import build_candidates
+        g = [{"timestamp": "2026-10-22 20:00:00", "ticker": "GLD", "signal_type": "CALL", "channel": "GRAVITY_ZONE"}]
+        self.assertEqual(len(build_candidates([], g, CFG)), 1)
+        self.assertEqual(build_candidates([], g, self.OFF), [])
+
+    def test_reports_only_vicente_luz_with_note(self):
+        now = datetime(2026, 11, 30, 13, 23, tzinfo=timezone.utc)
+        html, text = W6.build_weekly(self.data(), self.OFF, now, date(2026, 11, 23), date(2026, 11, 30))
+        self.assertIn("Gravity Zone: suspendido desde el 2026-11-24", html)
+        self.assertNotIn("Alertas Gravity Zone", html)
+        self.assertNotIn("Gravity Zone:", text)
+        html_m, _ = M7.build_monthly(self.data(), self.OFF, now, "2026-11", late=False)
+        self.assertIn("suspendido", html_m)
+        self.assertNotIn("Alertas Gravity Zone", html_m)
+
+    def test_channels(self):
+        from report_lib import channels
+        self.assertEqual([c for c, _ in channels(CFG)], ["VICENTE_LUZ", "GRAVITY_ZONE"])
+        self.assertEqual([c for c, _ in channels(self.OFF)], ["VICENTE_LUZ"])
+
+
 class SymbolsTest(unittest.TestCase):
     def test_parse_nasdaqtraded(self):
         text = ("Nasdaq Traded|Symbol|Security Name|Listing Exchange|Market Category|ETF|Round Lot Size|"

@@ -2,6 +2,17 @@
 
 Esta bitácora registra las correcciones al código que implementa el protocolo y las interpretaciones de lo que el protocolo no define. `PROTOCOLO.md` no cambia; su huella SHA-256 está en [`PROTOCOLO.sha256`](../PROTOCOLO.sha256). Los cambios al protocolo mismo van en adendas: [`ADENDA-01-UNIVERSO.md`](ADENDA-01-UNIVERSO.md).
 
+## 2026-11-24 — Gravity Zone suspendido (adenda 02)
+
+Por decisión del responsable del protocolo ([`ADENDA-02-GRAVITY.md`](ADENDA-02-GRAVITY.md)), solo se testea Vicente Luz:
+
+- **Configuración.** `gravity_enabled: false` en `config.json`.
+- **Script 2.** No evalúa nada.
+- **Script 4.** No abre operaciones de Gravity Zone y conserva tal cual las 3 históricas.
+- **Script 3.** No descarga precios para Gravity Zone.
+- **Reportes e hitos.** Solo muestran Vicente Luz, más una nota con el histórico de Gravity Zone.
+- **Datos.** `data/gravity_alerts.csv` se conserva.
+
 ## 2026-11-24 — Gravity Zone evaluada al cierre de cada día hábil
 
 Gravity Zone sigue siendo una aproximación: z-score diario más un filtro de rango. Sus umbrales los fijó la implementación original y **no están en PROTOCOLO.md**. Esta corrección no cambia la regla, solo **cuándo** se evalúa.

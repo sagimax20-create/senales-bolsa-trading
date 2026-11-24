@@ -69,6 +69,10 @@ def main() -> int:
                          "ops_version": OPS_VERSION}
         op["id"] = oid
         ops.append(op)
+    if not cfg.get("gravity_enabled", True):  # ADENDA-02: el historico de Gravity Zone se conserva tal cual
+        kept = {k: o for k, o in by_key.items() if o.get("channel") == "GRAVITY_ZONE"}
+        ops += kept.values()
+        by_key = {k: o for k, o in by_key.items() if k not in kept}
     if by_key:
         log_event(f"Script 4: {len(by_key)} operaciones sin señal valida (se quitan): "
                   f"{sorted(by_key)[:5]}", "WARNING")

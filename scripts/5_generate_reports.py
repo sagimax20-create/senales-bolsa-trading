@@ -15,7 +15,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common_utils import REPORTS_DIR, get_config, load_state, log_event, now_utc, send_email, update_state  # noqa: E402
-from report_lib import CHANNELS, load_data, milestones, pct  # noqa: E402
+from report_lib import channels, load_data, milestones, pct  # noqa: E402
 from signal_parser import PARSER_VERSION  # noqa: E402
 
 
@@ -23,7 +23,10 @@ def build_hitos(data: dict, cfg: dict, now) -> str:
     out = ["# Hitos de Decisión\n",
            f"_Actualizado: {now:%Y-%m-%d} UTC · generado por scripts/5_generate_reports.py · "
            "hitos por canal (PROTOCOLO §5); universo de Vicente Luz según docs/ADENDA-01-UNIVERSO.md_\n"]
-    for ch, name in CHANNELS:
+    if not cfg.get("gravity_enabled", True):
+        out.append("_Gravity Zone suspendido desde el 2026-11-24 (docs/ADENDA-02-GRAVITY.md): "
+                   "solo se testea Vicente Luz._\n")
+    for ch, name in channels(cfg):
         m = milestones(data, ch, cfg, now)
         st = m["stats"]
         out.append(
@@ -53,7 +56,7 @@ def main() -> int:
         log_event("Script 5: esperando el reprocesamiento de señales (parser v2); hitos sin cambios")
         return 0
     now = now_utc()
-    data = load_data()
+    data = load_data(cfg)
     text = build_hitos(data, cfg, now)
     path = REPORTS_DIR / "hitos.md"
     written = write_if_changed(path, text)
@@ -62,7 +65,7 @@ def main() -> int:
         written = True
     notified = set(state.get("hitos_notified", []))
     counts = {}
-    for ch, name in CHANNELS:
+    for ch, name in channels(cfg):
         m = milestones(data, ch, cfg, now)
         counts[name] = m["n"]
         events = [("alarma", m["n"] >= m["alarm"], f"Alarma alcanzada: {name} ({m['alarm']} señales)"),

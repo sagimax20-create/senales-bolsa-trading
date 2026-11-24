@@ -22,7 +22,7 @@ from datetime import date, datetime, timedelta
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common_utils import (NY, REPORT_STATE_PATH, REPORTS_DIR, get_config, load_state, log_event,  # noqa: E402
                           now_utc, send_email, update_state)
-from report_lib import (CHANNELS, OPS_HEADERS, channel_signals, discard_rows, kpis, load_data,  # noqa: E402
+from report_lib import (channels, OPS_HEADERS, channel_signals, discard_rows, kpis, load_data,  # noqa: E402
                         milestones, milestones_html, nota2_html, ny_bounds, ops_rows, page, pct,
                         results_html, summarize, table)
 from signal_parser import PARSER_VERSION  # noqa: E402
@@ -37,7 +37,7 @@ def last_complete_week(now: datetime) -> tuple[date, date]:
 
 def build_weekly(data: dict, cfg: dict, now: datetime, d0: date, d1: date) -> tuple[str, str]:
     a, b = ny_bounds(d0, d1)
-    week_counts = {ch: len(channel_signals(data, ch, a, b)) for ch, _ in CHANNELS}
+    week_counts = {ch: len(channel_signals(data, ch, a, b)) for ch, _ in channels(cfg)}
     vl_week = [s for s in data["signals"] if a <= s["timestamp"] < b]
     msgs_week = [m for m in data["messages"] if a <= m["timestamp"] < b]
     ops = data["ops"]
@@ -47,9 +47,10 @@ def build_weekly(data: dict, cfg: dict, now: datetime, d0: date, d1: date) -> tu
     period = f"{d0:%d-%m-%Y} al {d1 - timedelta(days=1):%d-%m-%Y}"
     body = (
         f"<h2>Resumen de la semana del {period}</h2>"
-        + kpis([("Señales válidas Vicente Luz (semana)", str(week_counts["VICENTE_LUZ"])),
-                ("Alertas Gravity Zone (semana)", str(week_counts["GRAVITY_ZONE"])),
-                ("Mensajes leídos (semana)", str(len(msgs_week))),
+        + kpis([("Señales válidas Vicente Luz (semana)", str(week_counts["VICENTE_LUZ"]))]
+               + ([("Alertas Gravity Zone (semana)", str(week_counts["GRAVITY_ZONE"]))]
+                  if "GRAVITY_ZONE" in week_counts else [])
+               + [("Mensajes leídos (semana)", str(len(msgs_week))),
                 ("Operaciones abiertas", str(st_all["n_open"])),
                 ("Operaciones cerradas (acumulado)", str(st_all["n_closed"])),
                 ("Pendientes / sin precio", f"{st_all['n_pending']} / {st_all['n_sin_precio']}")])
@@ -69,7 +70,7 @@ def build_weekly(data: dict, cfg: dict, now: datetime, d0: date, d1: date) -> tu
     title = "Reporte semanal — Testeo de señales"
     html = page(title, f"Semana del {period} · generado {now:%Y-%m-%d %H:%M} UTC", body)
     lines = [f"{title} — semana del {period}"]
-    for ch, name in CHANNELS:
+    for ch, name in channels(cfg):
         m = milestones(data, ch, cfg, now)
         st = m["stats"]
         lines.append(f"{name}: {week_counts[ch]} señales esta semana, {m['n']} acumuladas "
@@ -99,7 +100,7 @@ def main() -> int:
     if week_id in sent and "--force" not in sys.argv:
         log_event(f"Script 6: semana {week_id} ya enviada; nada que hacer")
         return 0
-    html, text = build_weekly(load_data(), cfg, now, d0, d1)
+    html, text = build_weekly(load_data(cfg), cfg, now, d0, d1)
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     (REPORTS_DIR / f"weekly_report_{d1.isoformat()}.html").write_text(html, encoding="utf-8")
     (REPORTS_DIR / "report_weekly.html").write_text(html, encoding="utf-8")

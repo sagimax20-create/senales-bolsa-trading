@@ -1,6 +1,6 @@
 # senales-bolsa-trading
 
-Seguimiento **en papel** de las señales de opciones del canal de Telegram "Alertas de Bolsa de Valores Vicente Luz" y de una aproximación al indicador Gravity Zone. Funciona solo, con GitHub Actions. Dinero ficticio: esto es análisis de datos, no asesoría financiera.
+Seguimiento **en papel** de las señales de opciones del canal de Telegram "Alertas de Bolsa de Valores Vicente Luz". Gravity Zone se suspendió el 2026-11-24 (ver más abajo). Funciona solo, con GitHub Actions. Dinero ficticio: esto es análisis de datos, no asesoría financiera.
 
 ## Protocolo
 
@@ -11,14 +11,16 @@ Seguimiento **en papel** de las señales de opciones del canal de Telegram "Aler
   ```
 
   Hay que correrlo en la carpeta donde estén `PROTOCOLO.md` y `TICKERS-PARA-SEGUIMIENTO-GRAVITY.md`.
-- **Cambios aprobados.** Están en [`docs/ADENDA-01-UNIVERSO.md`](docs/ADENDA-01-UNIVERSO.md): el universo de Vicente Luz se amplía a todos los tickers de EE. UU.
+- **Cambios aprobados:**
+  - [`docs/ADENDA-01-UNIVERSO.md`](docs/ADENDA-01-UNIVERSO.md): el universo de Vicente Luz se amplía a todos los tickers de EE. UU.
+  - [`docs/ADENDA-02-GRAVITY.md`](docs/ADENDA-02-GRAVITY.md): se suspende Gravity Zone y solo se testea Vicente Luz. Su histórico se conserva.
 - **Correcciones e interpretaciones.** Están en [`docs/BITACORA-IMPLEMENTACION.md`](docs/BITACORA-IMPLEMENTACION.md).
 
 ## Cómo corre
 
 | Workflow | Cuándo | Qué hace |
 |---|---|---|
-| `monitor.yml` | Cada 15 min, 24/7 (§7) | Lista de símbolos (semanal) → Telegram → Gravity Zone → velas de precio → operaciones → hitos |
+| `monitor.yml` | Cada 15 min, 24/7 (§7) | Lista de símbolos (semanal) → Telegram → velas de precio → operaciones → hitos (el paso de Gravity Zone está suspendido) |
 | `weekly_report.yml` | Lunes (martes de respaldo) | Reporte semanal por correo (§9) |
 | `monthly_report.yml` | Último día del mes (día 1 de respaldo) | Reporte mensual por correo (§9); envía, marcado "tardío", cualquier mes que falte |
 | `tests.yml` | En cada pull request | Pruebas del parser, del motor de operaciones y de los reportes |

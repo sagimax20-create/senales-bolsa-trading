@@ -21,6 +21,8 @@
   "database": "csv",
   "price_offhours_min_interval_hours": 4,
   "risk_free_rate": 0.045,
+  "gravity_enabled": false,
+  "gravity_doc": "docs/ADENDA-02-GRAVITY.md",
   "gravity_call_level": -2.0,
   "gravity_put_level": 2.0,
   "gravity_lookback_days": 20,

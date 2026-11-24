@@ -8,6 +8,8 @@ Retorno neto (PROTOCOLO §6), sobre operaciones CERRADAS de un canal:
   retorno neto     = (lo que se recibe - lo depositado) / lo depositado
   Ejemplo §4: deposito $10,000 -> opera $9,200 -> retira $11,200 -> recibe $10,080 -> +0.8%.
 Hitos (PROTOCOLO §5) por canal: Vicente Luz cuenta señales validas; Gravity Zone, alertas.
+Gravity Zone se suspendio el 2026-11-24 (ADENDA-02): con gravity_enabled = false los reportes solo
+muestran Vicente Luz y una nota con el historico de Gravity Zone.
 """
 from __future__ import annotations
 
@@ -20,6 +22,11 @@ from common_utils import (GRAVITY_COLS, GRAVITY_CSV, MESSAGES_COLS, MESSAGES_CSV
                           now_utc, parse_ts, to_float)
 
 CHANNELS = [("VICENTE_LUZ", "Vicente Luz"), ("GRAVITY_ZONE", "Gravity Zone")]
+
+
+def channels(cfg: dict) -> list[tuple[str, str]]:
+    """Canales activos del testeo."""
+    return [c for c in CHANNELS if c[0] != "GRAVITY_ZONE" or cfg.get("gravity_enabled", True)]
 REASONS = [("take_profit", "Take-profit +50%"), ("stop_loss", "Stop-loss −50%"), ("expiry", "Vencimiento 45 días")]
 MOTIVOS = {
     "repeticion": "Repetición de un contrato ya publicado",
@@ -38,21 +45,38 @@ SUPUESTOS = (
     "como IV y tasa libre de riesgo de config.json) porque el pipeline no consulta cotizaciones reales "
     "de opciones. El contrato es el del protocolo (OTM 95%, 45 días), no el que publica el canal. "
     "Entrada en la apertura de la primera vela de 15 minutos después de la señal; +50% / −50% revisados "
-    "vela por vela. Gravity Zone es una aproximación (z-score diario), no el indicador original. "
+    "vela por vela. "
     "Dinero ficticio. Esto es análisis de datos, no asesoría financiera."
 )
 
 
 # --------------------------------------------------------------------------- datos
-def load_data() -> dict:
+def load_data(cfg: dict | None = None) -> dict:
+    """Datos para los reportes. Con Gravity Zone suspendido, `ops` solo trae Vicente Luz y el
+    historico de Gravity Zone queda en `gravity_hist`."""
     signals = load_csv(SIGNALS_CSV, SIGNALS_COLS)
+    ops = load_csv(OPERATIONS_CSV, OPS_COLS)
+    active = {ch for ch, _ in channels(cfg or {})}
     return {
         "signals": signals,
         "valid": [s for s in signals if s.get("estado") == "valida"],
         "gravity": load_csv(GRAVITY_CSV, GRAVITY_COLS),
-        "ops": load_csv(OPERATIONS_CSV, OPS_COLS),
+        "ops": [o for o in ops if o["channel"] in active],
+        "gravity_hist": [o for o in ops if o["channel"] == "GRAVITY_ZONE"],
         "messages": load_csv(MESSAGES_CSV, MESSAGES_COLS),
     }
+
+
+def suspended_note(data: dict, cfg: dict) -> str:
+    """Nota de Gravity Zone suspendido (ADENDA-02), con su historico."""
+    if cfg.get("gravity_enabled", True):
+        return ""
+    hist = data.get("gravity_hist", [])
+    st = summarize(hist, cfg)
+    return (f"<p class='muted'>Gravity Zone: suspendido desde el 2026-11-24 (docs/ADENDA-02-GRAVITY.md). "
+            f"Histórico: {len(data.get('gravity', []))} alertas, {st['n_closed']} operaciones cerradas "
+            f"(take-profit {st['by_reason']['take_profit']['n']}, stop-loss {st['by_reason']['stop_loss']['n']}), "
+            f"neto promedio {esc(pct(st['avg_net']))}. No cuenta para hitos ni resultados.</p>")
 
 
 def channel_signals(data: dict, channel: str, start: str = "", end: str = "") -> list[dict]:
@@ -251,19 +275,19 @@ def progress(label: str, n: int, target: int) -> str:
 
 def milestones_html(data: dict, cfg: dict, now: datetime, week_counts: dict | None = None) -> str:
     out = []
-    for ch, name in CHANNELS:
+    for ch, name in channels(cfg):
         m = milestones(data, ch, cfg, now)
         extra = f" · esta semana: {week_counts[ch]}" if week_counts else ""
         out.append(f"<h3>{esc(name)}</h3><p>Señales válidas acumuladas: <b>{m['n']}</b>{esc(extra)}</p>"
                    f"{progress('Alarma', m['n'], m['alarm'])}<p class='muted'>Fecha estimada: {esc(m['eta_alarm'])}"
                    f" · {esc(m['a_action'])}</p>{progress('Decisión final', m['n'], m['final'])}"
                    f"<p class='muted'>Fecha estimada: {esc(m['eta_final'])} · {esc(m['f_state'])}. {esc(m['f_action'])}</p>")
-    return "".join(out)
+    return "".join(out) + suspended_note(data, cfg)
 
 
 def results_html(data: dict, cfg: dict) -> str:
     rows, reason_rows = [], []
-    views = [(name, ops_of(data, ch)) for ch, name in CHANNELS]
+    views = [(name, ops_of(data, ch)) for ch, name in channels(cfg)]
     views.append(("Vicente Luz · solo los 8 tickers originales", ops_of(data, "VICENTE_LUZ", original_only=True)))
     for name, ops in views:
         st = summarize(ops, cfg)
@@ -307,7 +331,7 @@ OPS_HEADERS = ["#", "Canal", "Ticker", "Tipo", "Señal (UTC)", "Entrada (UTC)", 
 
 def nota2_html(data: dict, cfg: dict) -> str:
     rows = []
-    for ch, name in CHANNELS:
+    for ch, name in channels(cfg):
         n2 = summarize(ops_of(data, ch), cfg)["nota2"]
         rows.append([name, n2["tp_con_sombra"], n2["toco_100"], n2["toco_150"], n2["toco_200"]])
     return ("<h3>Análisis retrospectivo (§10 nota 2)</h3><p class='muted'>Operaciones cerradas por take-profit "
