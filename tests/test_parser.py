@@ -230,6 +230,74 @@ class ReadMessagesTest(unittest.TestCase):
         self.assertTrue(all(len(m["sha256"]) == 64 and "_text" not in m for m in mrows))
 
 
+class ParserV3Test(unittest.TestCase):
+    """v3: el canal escribe tickers en minusculas (FCX, NVDL, TTWO... quedaron fuera en la v2) y
+    pone el dia de vencimiento pegado a la direccion ("Nov 20 calls")."""
+
+    S1 = load_script("1_parser_signals")
+    CFG = {"allowed_tickers": ["FCX", "NVDA"], "protocol_strike_otm": 0.95, "repost_window_days": 45}
+    PRICES = {"FCX": 48.0, "NVDL": 75.0, "GRAB": 5.2}
+
+    def rows(self, text, d=datetime(2026, 10, 5, 19, 0, tzinfo=timezone.utc)):
+        spot = lambda t, day: self.PRICES.get(t)  # noqa: E731
+        sig, _m, _p = self.S1.build_rows([(1, d, text)], SYMBOLS, self.CFG, [], spot)
+        return [(r["ticker"], r["estado"], r["motivo"], r["ticker_escrito"]) for r in sig]
+
+    def test_lowercase_ticker_next_to_contract_with_coherent_strike(self):
+        self.assertEqual(self.rows("Fcx jan 50 calls at 2.35"), [("FCX", "valida", "", "minusculas")])
+        self.assertEqual(self.rows("nvdl March 80 calls at 3.10"), [("NVDL", "valida", "", "minusculas")])
+
+    def test_lowercase_word_that_is_a_symbol_is_rejected_by_price(self):
+        """GRAB cotiza ~$5: un strike de 50 no es coherente, asi que "Grab" era un verbo."""
+        self.assertEqual(self.rows("Grab Jan 50 calls"), [("GRAB", "descartada", "minusculas_strike_incoherente",
+                                                           "minusculas")])
+
+    def test_lowercase_without_price_or_strike(self):
+        self.assertEqual(self.rows("ttwo Dec 260 calls at 5.40"),
+                         [("TTWO", "descartada", "minusculas_sin_precio", "minusculas")])
+        self.assertEqual(parse("dia dec calls at 2.10"), [])   # sin strike: no se intenta
+        self.assertEqual(parse("A huge day for calls"), [])
+
+    def test_two_letter_lowercase_never(self):
+        self.assertEqual(parse("on dec 70 calls"), [])
+        self.assertEqual(parse("at dec 200 calls"), [])
+
+    def test_uppercase_is_unchanged(self):
+        self.assertEqual(self.rows("FCX Jan 50 calls at 2.35"), [("FCX", "valida", "", "mayusculas")])
+        self.assertEqual(self.rows("$fcx Jan 50 calls"), [("FCX", "valida", "", "cashtag")])
+
+    def contract(self, text, d):
+        c = parse_message(text, SYMBOLS, d)[0]
+        return c.ticker, c.strike, c.expiry
+
+    def test_friday_after_month_is_the_day_not_the_strike(self):
+        d = date(2026, 10, 20)
+        self.assertEqual(self.contract("INTC Nov 20 calls at 1.50", d), ("INTC", None, "2026-11-20"))
+        self.assertEqual(self.contract("INTC 40 Nov 20 calls", d), ("INTC", 40.0, "2026-11-20"))
+        self.assertEqual(self.contract("TQQQ Dec 18 calls", date(2026, 11, 5)), ("TQQQ", None, "2026-12-18"))
+
+    def test_non_friday_number_stays_the_strike(self):
+        self.assertEqual(self.contract("F Nov 14 calls @0.69", date(2026, 10, 27)), ("F", 14.0, "2026-11"))
+
+    def test_year_is_not_the_strike(self):
+        self.assertEqual(self.contract("VST Jan 2027 calls", date(2026, 10, 5)), ("VST", None, "2027-01"))
+
+    def test_ordinal_day_is_not_a_ticker(self):
+        """La v2 leyo "20TH" como el ticker TH."""
+        self.assertEqual(self.contract("Hedge: SPY Nov 20TH 650 puts", date(2026, 10, 20)),
+                         ("SPY", 650.0, "2026-11-20"))
+        self.assertEqual(self.contract("TQQQ Dec 18th 60 calls", date(2026, 11, 5)), ("TQQQ", 60.0, "2026-12-18"))
+
+    def test_audit_marks_lowercase_ticker_as_valid(self):
+        ts = datetime(2026, 10, 5, 19, 19, 37, tzinfo=timezone.utc)
+        old = [{"message_id": "72881", "ticker": t, "signal_type": "CALL"} for t in ("FCX", "JAN", "AT")]
+        _s, _m, audit = self.S1.reprocess([(72881, ts, "Fcx jan 50 calls at 2.35")], SYMBOLS, self.CFG, old,
+                                          lambda t, day: self.PRICES.get(t))
+        self.assertEqual([(a["ticker"], a["estado_v2"], a["motivo_v2"]) for a in audit],
+                         [("FCX", "valida", ""), ("JAN", "descartada", "es_mes"),
+                          ("AT", "descartada", "palabra_en_minusculas")])
+
+
 class RealMessagesTest(unittest.TestCase):
     """Mensajes reales del canal (tests/fixtures/mensajes_reales.json), cuando se agreguen."""
 

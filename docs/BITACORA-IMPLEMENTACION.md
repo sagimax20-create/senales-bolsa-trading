@@ -2,6 +2,20 @@
 
 Esta bitácora registra las correcciones al código que implementa el protocolo y las interpretaciones de lo que el protocolo no define. `PROTOCOLO.md` no cambia; su huella SHA-256 está en [`PROTOCOLO.sha256`](../PROTOCOLO.sha256). Los cambios al protocolo mismo van en adendas: [`ADENDA-01-UNIVERSO.md`](ADENDA-01-UNIVERSO.md).
 
+## 2026-11-24 — Parser v3 (corrección tras la primera corrida real)
+
+La primera corrida real de la v2 (04:23 UTC) leyó 1,385 mensajes desde el 4-oct, encontró 82 señales válidas y terminó sin errores. Al revisar sus resultados aparecieron tres problemas:
+
+| Problema | Evidencia | Corrección (v3) |
+|---|---|---|
+| El canal escribe muchos tickers en minúsculas ("Fcx jan 50 calls") y la v2 solo aceptaba MAYÚSCULAS | 128 mensajes con un ticker sin ambigüedad (NVDL, FCX, DIA, TTWO, TQQQ, NVDA, IWM…) quedaron descartados como "palabra en minúsculas"; 102 de ellos traían mes de vencimiento | Una palabra en minúsculas cuenta como ticker solo si: está pegada al contrato, tiene 3 letras o más, está en la lista de símbolos, la línea no trae otro ticker en mayúsculas, el mensaje trae strike, y ese strike está entre 0.5 y 2 veces el cierre real del ticker ese día. Así "Grab Jan 50 calls" no se lee como GRAB (~$5). Si falla, queda descartada con motivo `minusculas_sin_strike`, `minusculas_sin_precio` o `minusculas_strike_incoherente`. Nueva columna `ticker_escrito` (mayusculas / cashtag / minusculas). |
+| El día de vencimiento se tomaba como strike | "INTC Nov 20 calls" dio strike 20 con INTC en ~$92. Pasó igual en MSFT, MSTR, KTOS, TQQQ, RKLB, MCD, USO y T. En "VST Jan 2027 calls", el strike salió 2027 | Un número pegado al mes y a la dirección es el día si ese día es viernes, o si hay otro número antes del mes que sirva de strike ("INTC 40 Nov 20 calls"). Un año (2025–2031) nunca es strike. |
+| "Nov 20TH" se leyó como el ticker TH | Señal de TH con strike 80 y TH en ~$15 | Los ordinales (1st, 2nd, 20th) se leen como números. |
+
+La siguiente corrida del monitor reprocesa todo automáticamente, porque cambia `parser_version`. Antes copia la v2 a `data/backup/` y vuelve a auditar las filas de la v1 contra `data/backup/signals_v1_*.csv`. La versión de operaciones no cambia: se conservan las operaciones de señales que siguen válidas, se agregan las nuevas y se quitan las de señales que ya no lo son.
+
+Otro dato de esa corrida: 448 de los 1,385 mensajes no tienen texto (imágenes o archivos sin descripción). Si una alerta se publica solo como imagen, el pipeline no la puede leer.
+
 ## 2026-11-24 — Versión 2 del pipeline
 
 ### Problemas de la versión 1 (diagnóstico del 2026-11-24)
@@ -54,7 +68,9 @@ Esta bitácora registra las correcciones al código que implementa el protocolo 
 - **Gravity Zone.** Sigue siendo una aproximación (z-score diario), no el indicador original.
 - **`iv_fallback` de `config.json`.** No coincide con la tabla de volatilidad de `TICKERS-PARA-SEGUIMIENTO-GRAVITY.md`. Solo se usa sin historia diaria, cosa que con Yahoo no pasa en la práctica. No se cambió.
 - **Límites del parser:**
-  - Un ticker escrito en minúsculas sin `$` no se reconoce.
+  - Un ticker en minúsculas sin `$` solo se reconoce pegado al contrato y con un strike coherente con su precio (v3).
+  - Si una línea trae un ticker en mayúsculas y otro en minúsculas, gana el de mayúsculas.
+  - Las alertas publicadas solo como imagen no se leen.
   - Un tutorial con un contrato de ejemplo bien escrito puede pasar como señal.
   - "MAR" en mayúsculas se lee como marzo, no como Marriott.
   - Cada caso queda en `signals.csv` o en `messages.csv` con su motivo, para auditarlo.
