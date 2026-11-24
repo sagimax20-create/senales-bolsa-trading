@@ -3,17 +3,17 @@
     "VICENTE_LUZ:alarma"
   ],
   "ops_version": 2,
-  "parser_version": 3,
-  "prices_last_fetch": "2026-11-24 15:04:25",
+  "parser_version": 4,
+  "prices_last_fetch": "2026-11-24 15:19:13",
   "reprocess_stats": {
-    "candidatas": 341,
+    "candidatas": 351,
     "correos_enmascarados_log": 0,
     "filas_v1": 2402,
-    "filas_v1_validas": 142,
-    "mensajes": 1385,
-    "validas": 148
+    "filas_v1_validas": 145,
+    "mensajes": 1402,
+    "validas": 153
   },
-  "reprocessed_at": "2026-11-24 04:45:28",
+  "reprocessed_at": "2026-11-24 15:19:10",
   "symbols_updated_at": "2026-11-24 04:23:12",
   "telegram_last_message_id": 74267
 }

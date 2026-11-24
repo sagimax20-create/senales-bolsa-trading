@@ -3,12 +3,12 @@
 _Actualizado: 2026-11-24 UTC · generado por scripts/5_generate_reports.py · hitos por canal (PROTOCOLO §5); universo de Vicente Luz según docs/ADENDA-01-UNIVERSO.md_
 
 ## Vicente Luz
-- Señales válidas: 148
-- Alarma (100): ALCANZADA (148/100) · fecha estimada: alcanzado
-  - Retorno neto sin costo bancario: -16.1% · Acción: REVISAR PROTOCOLO: retorno sin costo bancario < 5%.
-- Decisión final (300): PENDIENTE (148/300) · fecha estimada: 2027-01-15 (proyección al ritmo actual: 20.7 por semana)
-  - Retorno neto con costo bancario (criterio §6): -30.5% · Acción: Si el retorno neto con costo bancario es < 10%, se rechaza.
-- Operaciones: 136 cerradas · 12 abiertas · 0 pendientes · 0 sin precio
+- Señales válidas: 153
+- Alarma (100): ALCANZADA (153/100) · fecha estimada: alcanzado
+  - Retorno neto sin costo bancario: -15.4% · Acción: REVISAR PROTOCOLO: retorno sin costo bancario < 5%.
+- Decisión final (300): PENDIENTE (153/300) · fecha estimada: 2027-01-11 (proyección al ritmo actual: 21.4 por semana)
+  - Retorno neto con costo bancario (criterio §6): -30.0% · Acción: Si el retorno neto con costo bancario es < 10%, se rechaza.
+- Operaciones: 141 cerradas · 12 abiertas · 0 pendientes · 0 sin precio
 
 ## Gravity Zone
 - Señales válidas: 2
