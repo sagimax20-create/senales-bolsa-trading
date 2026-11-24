@@ -1,7 +1,7 @@
 {
-  "fuente": "copias publicas en GitHub de las listas de Nasdaq Trader (datasets/nasdaq-listings, datasets/nyse-other-listings) y rreichel3/US-Stock-Symbols; fecha de corte de cada copia: sin dato",
-  "construida_el": "2026-11-24",
-  "n_simbolos": 12949,
-  "n_etf": 5805,
-  "nota": "Version inicial. scripts/0_update_symbols.py la reemplaza por nasdaqtraded.txt oficial desde GitHub Actions."
+  "fuente": "https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqtraded.txt",
+  "descargado": "2026-11-24 04:23:12",
+  "file_creation_time": "1123202621:32|||||",
+  "n_simbolos": 12899,
+  "n_etf": 5831
 }

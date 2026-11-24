@@ -1,3 +1,16 @@
 {
-  "telegram_last_message_id": 74247
+  "ops_version": 2,
+  "parser_version": 2,
+  "prices_last_fetch": "2026-11-24 04:23:28",
+  "reprocess_stats": {
+    "candidatas": 206,
+    "correos_enmascarados_log": 7,
+    "filas_v1": 2402,
+    "filas_v1_validas": 77,
+    "mensajes": 1385,
+    "validas": 82
+  },
+  "reprocessed_at": "2026-11-24 04:23:28",
+  "symbols_updated_at": "2026-11-24 04:23:12",
+  "telegram_last_message_id": 74250
 }
