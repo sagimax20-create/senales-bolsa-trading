@@ -189,6 +189,12 @@ def main() -> int:
     needed = needed_tickers(signals, gravity, cfg, now, ops)
     tickers, mode = select_tickers(needed, now, state.get("prices_last_fetch"), cfg, "--force" in sys.argv,
                                    lambda t: (PRICES_DIR / ticker_file(t)).exists())
+    # acierto segun Vicente: velas diarias de tickers cuya señal sigue "en curso" (vencimientos largos)
+    for t in sorted({o["ticker"] for o in ops if o.get("vl_estado") == "en_curso"} - set(tickers)):
+        try:
+            update_daily(t, now)
+        except Exception as e:
+            log_event(f"Script 3: diaria de {t} fallo: {type(e).__name__}: {e}", "WARNING")
     if mode == "pausa":
         log_event("Script 3: mercado cerrado y descarga reciente; sin descarga")
         return 0

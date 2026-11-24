@@ -22,7 +22,7 @@ from datetime import date, datetime, timedelta
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common_utils import (NY, REPORT_STATE_PATH, REPORTS_DIR, get_config, load_state, log_event,  # noqa: E402
                           now_utc, send_email, update_state)
-from report_lib import (channels, OPS_HEADERS, channel_signals, discard_rows, kpis, levels_html, load_data,  # noqa: E402
+from report_lib import (channels, OPS_HEADERS, channel_signals, discard_rows, kpis, levels_html, load_data, vl_html,  # noqa: E402
                         milestones, milestones_html, nota2_html, ny_bounds, ops_rows, page, pct,
                         results_html, summarize, table)
 from signal_parser import PARSER_VERSION  # noqa: E402
@@ -62,6 +62,8 @@ def build_weekly(data: dict, cfg: dict, now: datetime, d0: date, d1: date) -> tu
         + "<h2>Resultados</h2>" + results_html(data, cfg)
         + "<h2>Niveles de ganancia: +25%, +50%, +75% y +100%</h2>"
         + levels_html(data, cfg, a, b, "esta semana")
+        + "<h2>Aciertos según el contrato de Vicente (su strike y su vencimiento)</h2>"
+        + vl_html(data, cfg, a, b, "esta semana")
         + f"<h2>Operaciones de la semana ({len(week_ops)})</h2>"
         + table(OPS_HEADERS, ops_rows(week_ops), "Ninguna operación abrió ni cerró esta semana.")
         + f"<h2>Operaciones abiertas hoy ({len(open_ops)})</h2>"

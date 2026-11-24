@@ -18,6 +18,13 @@ NOW = datetime(2026, 11, 30, 15, 0, tzinfo=timezone.utc)
 
 def data():
     d = ProfitLevelsReportTest().leveled()
+    vl = {"1": {"vl_estado": "acerto", "vl_fecha_toque": "2026-11-04", "vl_dias_toque": "1", "vl_dist_inicial_pct": "-2.0",
+                "vl_vencimiento": "2026-11-20", "vl_mejor_pct": "1.0"},
+          "2": {"vl_estado": "no_acerto", "vl_vencimiento": "2026-11-13", "vl_mejor_pct": "-3.0", "vl_dist_inicial_pct": "-5.0"},
+          "3": {"vl_estado": "en_curso", "vl_vencimiento": "2026-12-18", "vl_mejor_pct": "-1.5", "vl_dist_inicial_pct": "-4.0"}}
+    for o in d["ops"]:
+        o.update(vl.get(o["id"], {}))
+        o["signal_id"] = f"VL-{o['id']}-NVDA-C"
     d["gravity_hist"] = [o for o in d["ops"] if o["channel"] == "GRAVITY_ZONE"]
     d["ops"] = [o for o in d["ops"] if o["channel"] != "GRAVITY_ZONE"]
     return d
@@ -50,10 +57,16 @@ class CommandsTest(unittest.TestCase):
         self.assertIn("Últimas 10 señales válidas", ask("/señales"))
         self.assertIn("Repetición de un contrato", ask("/senales"))
 
-    def test_aciertos(self):
+    def test_aciertos_by_vicente_contract(self):
         r = ask("/aciertos")
-        self.assertIn("NVDA: take-profit 1/2 (50%)", r)
+        self.assertIn("NVDA: acertó 1/2 (50%)", r)
+        self.assertIn("take-profit protocolo 1/2", r)
+        self.assertIn("en curso 1", r)
         self.assertIn("no es confiable", r)
+
+    def test_vicente_line_in_open_and_signals(self):
+        self.assertIn("Vicente: en curso: strike", ask("/abiertas"))
+        self.assertIn("Vicente: ", ask("/senales"))
 
     def test_help_and_bot_suffix(self):
         self.assertEqual(ask("/ayuda"), commands.HELP)

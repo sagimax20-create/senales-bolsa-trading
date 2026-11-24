@@ -19,7 +19,7 @@ from common_utils import (BAR_COLS, DAILY_COLS, DAILY_DIR, GRAVITY_COLS, GRAVITY
                           OPERATIONS_CSV, OPS_COLS, PRICES_DIR, SIGNALS_COLS, SIGNALS_CSV, backup_once,
                           get_config, load_csv, load_state, log_event, now_utc, save_csv, ticker_file,
                           update_state)
-from ops_engine import OPS_VERSION, build_candidates, evaluate  # noqa: E402
+from ops_engine import OPS_VERSION, build_candidates, evaluate, vicente_outcome  # noqa: E402
 from signal_parser import PARSER_VERSION  # noqa: E402
 
 
@@ -57,6 +57,9 @@ def main() -> int:
         if not old:
             next_id += 1
         if old and old["estado"] == "closed" and str(old.get("sombra_completa")) == "1":
+            if old.get("channel") == "VICENTE_LUZ" and old.get("vl_estado") in ("en_curso", "", None):
+                bars, daily = prices(c["ticker"])   # el vencimiento de Vicente puede ser posterior al dia 45
+                old.update(vicente_outcome(old, bars, daily, now))
             ops.append(old)
             frozen += 1
             continue

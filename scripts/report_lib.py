@@ -432,6 +432,103 @@ def levels_html(data: dict, cfg: dict, a: str = "", b: str = "", period: str = "
     return "".join(out)
 
 
+# --------------------------------------------------------------------------- acierto segun Vicente
+VL_ESTADOS = {"acerto": "acertó", "no_acerto": "no acertó", "en_curso": "en curso", "sin_dato": "sin dato"}
+
+
+def vl_easy(o: dict) -> bool:
+    """El precio ya estaba en el strike de Vicente (o mas alla) al publicarse la señal."""
+    d = to_float(o.get("vl_dist_inicial_pct"))
+    return d is not None and d >= 0
+
+
+def _median(xs: list[float]) -> float | None:
+    xs = sorted(xs)
+    return xs[len(xs) // 2] if xs else None
+
+
+def vl_summary(ops: list[dict]) -> dict:
+    vl = [o for o in ops if o["channel"] == "VICENTE_LUZ"]
+    counts = defaultdict(int)
+    for o in vl:
+        counts[o.get("vl_estado") or "sin_dato"] += 1
+    res = [o for o in vl if o.get("vl_estado") in ("acerto", "no_acerto")]
+    hard = [o for o in res if not vl_easy(o)]
+    hits = [o for o in res if o["vl_estado"] == "acerto"]
+    hard_hits = [o for o in hard if o["vl_estado"] == "acerto"]
+    return {
+        "counts": dict(counts), "resueltas": len(res), "aciertos": len(hits),
+        "tasa": len(hits) / len(res) * 100 if res else None,
+        "faciles": len(res) - len(hard), "dificiles": len(hard), "aciertos_dificiles": len(hard_hits),
+        "tasa_dificil": len(hard_hits) / len(hard) * 100 if hard else None,
+        "mediana_dias": _median([float(o["vl_dias_toque"]) for o in hits if o.get("vl_dias_toque") not in ("", None)]),
+        "mediana_falto": _median([to_float(o["vl_mejor_pct"]) for o in res if o["vl_estado"] == "no_acerto"
+                                  and to_float(o.get("vl_mejor_pct")) is not None]),
+    }
+
+
+def vl_ranking(ops: list[dict], min_resolved: int = 2) -> list[dict]:
+    """Por ticker: aciertos segun el contrato de Vicente (solo señales ya resueltas)."""
+    g = defaultdict(list)
+    for o in ops:
+        if o["channel"] == "VICENTE_LUZ":
+            g[o["ticker"]].append(o)
+    rows = []
+    for t, os_ in g.items():
+        res = [o for o in os_ if o.get("vl_estado") in ("acerto", "no_acerto")]
+        if len(res) < min_resolved:
+            continue
+        hits = [o for o in res if o["vl_estado"] == "acerto"]
+        closed = [o for o in os_ if o["estado"] == "closed"]
+        rows.append({"ticker": t, "resueltas": len(res), "aciertos": len(hits),
+                     "faciles": sum(vl_easy(o) for o in hits), "tasa": len(hits) / len(res) * 100,
+                     "en_curso": sum(o.get("vl_estado") == "en_curso" for o in os_),
+                     "tp": sum(o["reason_exit"] == "take_profit" for o in closed), "cerradas": len(closed),
+                     "neto": sum(to_float(o.get("retorno_neto_pct"), 0.0) for o in closed) / len(closed) if closed else None})
+    return sorted(rows, key=lambda r: (-r["tasa"], -r["resueltas"], r["ticker"]))
+
+
+def vl_html(data: dict, cfg: dict, a: str = "", b: str = "", period: str = "") -> str:
+    ops = ops_of(data, "VICENTE_LUZ")
+    s = vl_summary(ops)
+    c = s["counts"]
+    out = ["<p class='muted'>Mide la alerta de Vicente en sus propios términos: ¿el precio tocó el strike que él "
+           "publicó antes de la fecha de vencimiento que él publicó? (si solo dice el mes, tercer viernes; en "
+           "spreads, el precio al cierre del vencimiento en la zona de ganancia máxima). «Ya en el dinero» = el "
+           "precio ya estaba en el strike al publicarse (acierto fácil). Es análisis aparte: el resultado oficial "
+           "del protocolo sigue siendo el de 45 días y +50% / −50%.</p>",
+           table(["Resueltas", "Acertó", "% acierto", "% acierto sin contar «ya en el dinero»", "No acertó",
+                  "En curso", "Sin dato", "Días hasta el toque (mediana)", "Cuánto le faltó al que no acertó (mediana)"],
+                 [[s["resueltas"], s["aciertos"], pct(s["tasa"], 0, False),
+                   f"{pct(s['tasa_dificil'], 0, False)} ({s['aciertos_dificiles']}/{s['dificiles']})",
+                   c.get("no_acerto", 0), c.get("en_curso", 0), c.get("sin_dato", 0),
+                   "sin dato" if s["mediana_dias"] is None else f"{s['mediana_dias']:.0f}",
+                   pct(s["mediana_falto"])]])]
+    if a or b:
+        d0 = parse_ts(a).astimezone(NY).date().isoformat() if a else ""
+        d1 = parse_ts(b).astimezone(NY).date().isoformat() if b else "9999"
+        rows = []
+        for o in sorted(ops, key=lambda o: o.get("vl_fecha_toque") or o.get("vl_vencimiento") or ""):
+            when = o.get("vl_fecha_toque") if o.get("vl_estado") == "acerto" else (
+                o.get("vl_vencimiento") if o.get("vl_estado") == "no_acerto" else "")
+            if when and d0 <= when < d1:
+                rows.append([o["ticker"], o["option_type"], o["signal_timestamp"][:10], o.get("strike_vl") or "sin dato",
+                             o.get("vl_vencimiento") or "sin dato",
+                             VL_ESTADOS.get(o["vl_estado"], o["vl_estado"]) + (" (ya en el dinero)" if vl_easy(o) else ""),
+                             o.get("vl_fecha_toque") or "", o.get("vl_dias_toque") or "", pct(to_float(o.get("vl_mejor_pct")))])
+        out.append(f"<h3>Resueltas {esc(period)}</h3>" + table(
+            ["Ticker", "Tipo", "Señal", "Strike de Vicente", "Vencimiento", "Resultado", "Tocó el strike", "Días",
+             "Mejor precio frente al strike"], rows, "Ninguna señal se resolvió en este período."))
+    rank = vl_ranking(ops)[:10]
+    out.append("<h3>Tickers con más aciertos (mínimo 2 señales resueltas)</h3>" + table(
+        ["Ticker", "Acertó", "% acierto", "De ellos ya en el dinero", "En curso", "Take-profit (protocolo)",
+         "Neto prom. (protocolo)"],
+        [[r["ticker"], f"{r['aciertos']}/{r['resueltas']}", pct(r["tasa"], 0, False), r["faciles"], r["en_curso"],
+          f"{r['tp']}/{r['cerradas']}", pct(r["neto"])] for r in rank], "Aún no hay tickers con 2 señales resueltas.")
+        + "<p class='muted'>Con pocas señales por ticker, el porcentaje no es confiable.</p>")
+    return "".join(out)
+
+
 def discard_rows(signals: list[dict]) -> list[list]:
     c = defaultdict(int)
     for s in signals:

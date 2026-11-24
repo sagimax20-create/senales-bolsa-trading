@@ -24,11 +24,12 @@ al strike o cerca de el. Tambien el precio mas favorable del subyacente en los 4
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+import re
+from datetime import date, datetime, time, timedelta
 
-from common_utils import NY, bs_price, calculate_strike, fmt_ts, iv_for, parse_ts, to_float
+from common_utils import NY, bs_price, calculate_strike, fmt_ts, is_trading_day, iv_for, parse_ts, to_float
 
-OPS_VERSION = 3
+OPS_VERSION = 4
 PROFIT_LEVELS = (25, 50, 75, 100)   # % de ganancia de la prima
 YEAR_SECONDS = 365 * 86400
 _INTERVALS = {"15m": timedelta(minutes=15), "60m": timedelta(minutes=60), "1h": timedelta(hours=1)}
@@ -58,12 +59,119 @@ def _num_bars(bars: list[dict]) -> list[tuple[datetime, timedelta, float, float,
     return out
 
 
+# --------------------------------------------------------------------------- acierto segun Vicente
+def third_friday(year: int, month: int) -> date:
+    """Vencimiento mensual estandar: tercer viernes (jueves si ese viernes es feriado NYSE)."""
+    d = date(year, month, 15)
+    while d.weekday() != 4:
+        d += timedelta(days=1)
+    while not is_trading_day(d):
+        d -= timedelta(days=1)
+    return d
+
+
+def vl_expiry_date(expiry_vl: str) -> date | None:
+    """Fecha de vencimiento publicada por Vicente: AAAA-MM-DD, o AAAA-MM -> tercer viernes."""
+    try:
+        if len(expiry_vl or "") == 10:
+            return date.fromisoformat(expiry_vl)
+        if len(expiry_vl or "") == 7:
+            y, m = (int(x) for x in expiry_vl.split("-"))
+            return third_friday(y, m)
+    except ValueError:
+        return None
+    return None
+
+
+def _spread_target(spread: str, view: str) -> float | None:
+    """Strike que el precio debe superar al vencimiento para la ganancia maxima del spread."""
+    m = re.match(r"(CALL|PUT)\s+([\d.]+)/([\d.]+)", spread or "")
+    if not m:
+        return None
+    a, b = float(m.group(2)), float(m.group(3))
+    return max(a, b) if view == "CALL" else min(a, b)
+
+
+def vicente_outcome(info: dict, bars: list[dict], daily: list[dict], now: datetime) -> dict:
+    """¿El precio llego al strike de Vicente entre la señal y SU fecha de vencimiento?
+
+    info: option_type (CALL/PUT = direccion), signal_timestamp, strike_vl, expiry_vl, spread_vl.
+    Opcion simple: acierta si el maximo (CALL) o el minimo (PUT) toca el strike antes del
+    vencimiento; el dia de la señal solo cuentan las velas de 15 min posteriores a la señal.
+    Spread: acierta si al cierre del dia de vencimiento el precio quedo en la zona de ganancia
+    maxima. Estados: acerto | no_acerto | en_curso | sin_dato."""
+    out = {"vl_vencimiento": "", "vl_estado": "sin_dato", "vl_fecha_toque": "", "vl_dias_toque": "",
+           "vl_mejor_pct": "", "vl_dist_inicial_pct": ""}
+    strike, exp = to_float(info.get("strike_vl")), vl_expiry_date(info.get("expiry_vl") or "")
+    view = info["option_type"]
+    sig_ts = parse_ts(info["signal_timestamp"])
+    sig_day = sig_ts.astimezone(NY).date()
+    if exp:
+        out["vl_vencimiento"] = exp.isoformat()
+    target = _spread_target(info.get("spread_vl") or "", view)
+    level = target if target is not None else strike
+    if level is None or exp is None or exp < sig_day:
+        return out
+    today = now.astimezone(NY).date()
+    last_td = exp
+    while not is_trading_day(last_td) and last_td > sig_day:
+        last_td -= timedelta(days=1)
+    better = (lambda x, y: x >= y) if view == "CALL" else (lambda x, y: x <= y)
+    # camino de precios favorables: velas de 15 min del dia de la señal + velas diarias posteriores
+    path: list[tuple[date, float]] = []
+    ref = None   # precio al publicarse la señal: apertura de la primera vela posterior
+    for b_start, b_step, o, h, l, _c, _iv in _num_bars(bars):
+        if b_start >= sig_ts and ref is None:
+            ref = o
+        if b_start >= sig_ts and b_start.astimezone(NY).date() == sig_day <= exp:
+            path.append((sig_day, h if view == "CALL" else l))
+    closes = {}
+    for r in sorted(daily, key=lambda r: r["date"]):
+        d = date.fromisoformat(r["date"])
+        hi, lo, cl = to_float(r.get("high")), to_float(r.get("low")), to_float(r.get("close"))
+        if hi is None or lo is None:
+            continue
+        closes[d] = cl
+        if ref is None and d > sig_day:
+            ref = to_float(r.get("open")) or cl
+        if sig_day < d <= exp:
+            path.append((d, hi if view == "CALL" else lo))
+    if ref:   # >= 0: el precio ya estaba en el strike o mas alla al publicarse (acierto "facil")
+        out["vl_dist_inicial_pct"] = round(((ref - level) / level if view == "CALL" else (level - ref) / level) * 100, 2)
+    if path:
+        best = max(p for _, p in path) if view == "CALL" else min(p for _, p in path)
+        out["vl_mejor_pct"] = round(((best - level) / level if view == "CALL" else (level - best) / level) * 100, 2)
+    covered = last_td in closes and today > exp or (today == exp and last_td in closes and now.astimezone(NY).time() >= time(16, 30))
+    if target is not None:   # spread: se decide al cierre del vencimiento
+        if covered:
+            ok = closes.get(last_td) is not None and better(closes[last_td], target)
+            out["vl_estado"] = "acerto" if ok else "no_acerto"
+            if ok:
+                out["vl_fecha_toque"], out["vl_dias_toque"] = last_td.isoformat(), (last_td - sig_day).days
+        else:
+            out["vl_estado"] = "en_curso"
+        return out
+    touch = next((d for d, p in path if better(p, strike)), None)
+    if touch:
+        out.update({"vl_estado": "acerto", "vl_fecha_toque": touch.isoformat(), "vl_dias_toque": (touch - sig_day).days})
+    elif covered:
+        out["vl_estado"] = "no_acerto"
+    elif not closes and today > exp + timedelta(days=5):
+        out["vl_estado"] = "sin_dato"   # sin precios del ticker
+    else:
+        out["vl_estado"] = "en_curso"
+    return out
+
+
 def evaluate(cand: dict, bars: list[dict], daily: list[dict], cfg: dict, now: datetime) -> dict:
     """Operacion completa para una señal, recalculada desde las velas (determinista)."""
     op = {"ticker": cand["ticker"], "option_type": cand["type"], "channel": cand["channel"],
           "signal_timestamp": cand["ts"], "signal_key": cand["key"], "signal_id": cand.get("signal_id", ""),
           "message_id": cand.get("message_id", ""), "en_universo_original": cand.get("original", ""),
-          "strike_vl": cand.get("strike_vl", ""), "ops_version": OPS_VERSION, "sombra_completa": 0}
+          "strike_vl": cand.get("strike_vl", ""), "expiry_vl": cand.get("expiry_vl", ""),
+          "spread_vl": cand.get("spread", ""), "ops_version": OPS_VERSION, "sombra_completa": 0}
+    if op["channel"] == "VICENTE_LUZ":
+        op.update(vicente_outcome(op, bars, daily, now))
     sig_ts = parse_ts(cand["ts"])
     nb = _num_bars(bars)
     entry_i = next((i for i, b in enumerate(nb) if b[0] >= sig_ts), None)
@@ -169,7 +277,8 @@ def build_candidates(signals: list[dict], gravity: list[dict], cfg: dict) -> lis
         out.append({"ts": r["timestamp"], "ticker": r["ticker"], "type": r["signal_type"], "channel": r["channel"],
                     "key": f"{r['channel']}|{r['signal_id']}", "signal_id": r["signal_id"],
                     "message_id": r["message_id"], "original": "1" if r["ticker"] in allowed else "0",
-                    "strike_vl": r.get("strike_vl", "")})
+                    "strike_vl": r.get("strike_vl", ""), "expiry_vl": r.get("expiry_vl", ""),
+                    "spread": r.get("spread", "")})
     for r in (gravity if cfg.get("gravity_enabled", True) else []):
         if r["ticker"] not in allowed or r["signal_type"] not in ("CALL", "PUT") or r["timestamp"] < start:
             continue

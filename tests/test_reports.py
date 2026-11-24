@@ -338,6 +338,19 @@ class TelegramNotifyTest(unittest.TestCase):
         self.assertEqual(groups, [[0, 1], [2, 3], [4]])
 
 
+class VicenteNotifyTest(unittest.TestCase):
+    def test_message(self):
+        o = {"ticker": "AAPL", "option_type": "CALL", "signal_timestamp": "2026-10-12 19:00:00", "strike_vl": "345",
+             "vl_vencimiento": "2026-10-16", "vl_fecha_toque": "2026-10-13", "vl_dias_toque": "1",
+             "vl_dist_inicial_pct": "-1.2", "reason_exit": "take_profit", "estado": "closed"}
+        msg = N8.format_vl(o)
+        self.assertIn("🎯 Vicente acertó: AAPL CALL", msg)
+        self.assertIn("strike de Vicente $345.00 · vencía el 2026-10-16", msg)
+        self.assertIn("Tocó su strike el 2026-10-13 (1 días después de la señal)", msg)
+        self.assertIn("take-profit (+50%)", msg)
+        self.assertNotIn("ya estaba en el dinero", msg)
+
+
 class SymbolsTest(unittest.TestCase):
     def test_parse_nasdaqtraded(self):
         text = ("Nasdaq Traded|Symbol|Security Name|Listing Exchange|Market Category|ETF|Round Lot Size|"

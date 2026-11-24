@@ -2,6 +2,29 @@
 
 Esta bitácora registra las correcciones al código que implementa el protocolo y las interpretaciones de lo que el protocolo no define. `PROTOCOLO.md` no cambia; su huella SHA-256 está en [`PROTOCOLO.sha256`](../PROTOCOLO.sha256). Los cambios al protocolo mismo van en adendas: [`ADENDA-01-UNIVERSO.md`](ADENDA-01-UNIVERSO.md).
 
+## 2026-11-24 — Acierto según el contrato de Vicente (su strike y su vencimiento)
+
+Pedido del responsable del protocolo: evaluar cada alerta con las fechas que publica Vicente, no solo con los 45 días del protocolo. Es **análisis aparte**: el resultado oficial (contrato OTM 95% a 45 días, +50% / −50% / vencimiento) no cambia.
+
+- **`ops_engine.vicente_outcome` (`OPS_VERSION` 4).** Para cada señal válida:
+  - **Opción simple:** acierta si el precio toca el strike de Vicente entre la señal y su fecha de vencimiento. Se usa el máximo diario para calls y el mínimo para puts. El día de la señal solo cuentan las velas de 15 min posteriores a ella.
+  - **Solo mes ("Jan"):** se usa el tercer viernes; si es feriado NYSE, el jueves.
+  - **Spreads:** acierta si al cierre del vencimiento el precio quedó en la zona de ganancia máxima.
+  - **Estados:** `acerto`, `no_acerto`, `en_curso` y `sin_dato`.
+  - **Columnas:**
+    - `vl_vencimiento`;
+    - `vl_fecha_toque` y `vl_dias_toque`;
+    - `vl_mejor_pct`: lo más cerca o lo más lejos que llegó;
+    - `vl_dist_inicial_pct`: si es mayor o igual a 0, ya estaba en el dinero al publicarse; es el "acierto fácil" que el estudio de tickers excluía.
+- **Scripts 4 y 3.** Las operaciones ya cerradas siguen actualizando este estado hasta el vencimiento de Vicente, aunque sea en 2028; el script 3 baja sus velas diarias.
+- **Reportes semanal y mensual.** Nueva sección "Aciertos según el contrato de Vicente", con el resumen, las señales resueltas en el período (con fechas) y el ranking por ticker.
+- **Bot.**
+  - `/aciertos` rankea por este acierto, con el total con y sin los "ya en el dinero".
+  - `/senales` y `/abiertas` muestran el estado de cada señal.
+  - El aviso "🎯 Vicente acertó" llega cuando una señal toca su strike; la primera vez no manda el histórico.
+
+Con los datos al 24-nov, de 101 señales resueltas Vicente acertó 47 (47%). Sin contar las 15 que ya estaban en el dinero al publicarse, acertó 33 de 86 (38%). Cuando acierta, tarda una mediana de 2 días. Las que no acertaron quedaron, en mediana, a 3.5% del strike. Hay 48 en curso.
+
 ## 2026-11-24 — Bot con comandos en Render
 
 Pedido del responsable del protocolo: consultar el testeo escribiéndole al bot. Comandos: `/estado`, `/abiertas`, `/niveles`, `/senales` (acepta `/señales`), `/aciertos` y `/ayuda`.
