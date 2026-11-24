@@ -12,7 +12,8 @@ el +50% / -50% se evaluan con todas las velas, aunque GitHub se salte corridas.
 Tickers: los de señales validas (Vicente Luz) y alertas (Gravity Zone) cuya operacion aun no
 termino su seguimiento de 45 dias. Las de mas de 60 dias se completan con velas de 60 min.
 Durante la sesion NYSE descarga en cada corrida; fuera de horario, como mucho cada
-`price_offhours_min_interval_hours` horas (para cerrar el dia). `--force` salta ese filtro.
+`price_offhours_min_interval_hours` horas (para cerrar el dia), salvo los tickers que aun no
+tienen velas, que se descargan siempre. `--force` salta ese filtro.
 Un ticker que falla se registra y no detiene a los demas. La vela en curso no se guarda.
 """
 from __future__ import annotations
@@ -162,22 +163,35 @@ def update_daily(ticker: str, now: datetime, fetcher=fetch_daily) -> bool:
     return True
 
 
+def select_tickers(tickers: dict[str, datetime], now: datetime, last_fetch: str | None, cfg: dict,
+                   force: bool, has_bars) -> tuple[dict[str, datetime], str]:
+    """Que tickers descargar en esta corrida: todos, o fuera de horario y con descarga reciente,
+    solo los que aun no tienen velas (p. ej. tras reprocesar señales: sin esto esperarian horas)."""
+    min_gap = timedelta(hours=float(cfg.get("price_offhours_min_interval_hours", 4)))
+    paused = (not force and not market_open(now) and last_fetch is not None
+              and now - parse_ts(last_fetch) < min_gap)
+    if not paused:
+        return tickers, "todos"
+    new = {t: e for t, e in tickers.items() if not has_bars(t)}
+    return new, ("solo_sin_velas" if new else "pausa")
+
+
 def main() -> int:
     cfg = get_config()
     now = now_utc()
     state = load_state()
     if state.get("parser_version") != PARSER_VERSION:
-        log_event("Script 3: esperando el reprocesamiento de señales (parser v2); sin descarga")
-        return 0
-    last = state.get("prices_last_fetch")
-    min_gap = timedelta(hours=float(cfg.get("price_offhours_min_interval_hours", 4)))
-    if "--force" not in sys.argv and not market_open(now) and last and now - parse_ts(last) < min_gap:
-        log_event("Script 3: mercado cerrado y descarga reciente; sin descarga")
+        log_event("Script 3: esperando el reprocesamiento de señales; sin descarga")
         return 0
     signals = load_csv(SIGNALS_CSV, SIGNALS_COLS)
     gravity = load_csv(GRAVITY_CSV, GRAVITY_COLS)
     ops = load_csv(OPERATIONS_CSV, OPS_COLS) if state.get("ops_version") == 2 else []
-    tickers = needed_tickers(signals, gravity, cfg, now, ops)
+    needed = needed_tickers(signals, gravity, cfg, now, ops)
+    tickers, mode = select_tickers(needed, now, state.get("prices_last_fetch"), cfg, "--force" in sys.argv,
+                                   lambda t: (PRICES_DIR / ticker_file(t)).exists())
+    if mode == "pausa":
+        log_event("Script 3: mercado cerrado y descarga reciente; sin descarga")
+        return 0
     failed, n_new = [], 0
     for t, earliest in sorted(tickers.items()):
         try:
@@ -186,8 +200,9 @@ def main() -> int:
         except Exception as e:
             failed.append(t)
             log_event(f"Script 3: {t} fallo: {type(e).__name__}: {e}", "WARNING")
-    update_state(prices_last_fetch=fmt_ts(now))
-    log_event(f"Script 3: {len(tickers)} tickers, {n_new} velas nuevas; fallidos: {failed or 'ninguno'}")
+    if mode == "todos":
+        update_state(prices_last_fetch=fmt_ts(now))
+    log_event(f"Script 3 ({mode}): {len(tickers)} tickers, {n_new} velas nuevas; fallidos: {failed or 'ninguno'}")
     return 1 if tickers and len(failed) == len(tickers) else 0
 
 

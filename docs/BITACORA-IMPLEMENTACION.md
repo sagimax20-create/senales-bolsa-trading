@@ -2,6 +2,10 @@
 
 Esta bitácora registra las correcciones al código que implementa el protocolo y las interpretaciones de lo que el protocolo no define. `PROTOCOLO.md` no cambia; su huella SHA-256 está en [`PROTOCOLO.sha256`](../PROTOCOLO.sha256). Los cambios al protocolo mismo van en adendas: [`ADENDA-01-UNIVERSO.md`](ADENDA-01-UNIVERSO.md).
 
+## 2026-11-24 — Precios para tickers nuevos fuera de horario
+
+Con la bolsa cerrada, el script 3 solo descarga cada 4 horas. En la corrida del parser v3 (04:45 UTC) eso dejó 38 de 150 operaciones sin precio: 25 tickers nuevos (FCX, NVDL, TTWO, DIA…) sin ninguna vela. Ahora, durante esa pausa, igual se descargan los tickers que aún no tienen velas; el resto sigue esperando.
+
 ## 2026-11-24 — Parser v3 (corrección tras la primera corrida real)
 
 La primera corrida real de la v2 (04:23 UTC) leyó 1,385 mensajes desde el 4-oct, encontró 82 señales válidas y terminó sin errores. Al revisar sus resultados aparecieron tres problemas:
