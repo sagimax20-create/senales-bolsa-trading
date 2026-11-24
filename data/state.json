@@ -4,7 +4,7 @@
   ],
   "ops_version": 2,
   "parser_version": 3,
-  "prices_last_fetch": "2026-11-24 04:23:28",
+  "prices_last_fetch": "2026-11-24 15:04:25",
   "reprocess_stats": {
     "candidatas": 341,
     "correos_enmascarados_log": 0,
@@ -15,5 +15,5 @@
   },
   "reprocessed_at": "2026-11-24 04:45:28",
   "symbols_updated_at": "2026-11-24 04:23:12",
-  "telegram_last_message_id": 74250
+  "telegram_last_message_id": 74267
 }

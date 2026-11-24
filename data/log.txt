@@ -593,3 +593,11 @@
 2026-11-24 04:49:27,885 [INFO] Script 3 (solo_sin_velas): 24 tickers, 14254 velas nuevas; fallidos: ninguno
 2026-11-24 04:49:28,624 [INFO] Script 4: 150 operaciones {'closed': 138, 'open': 10, 'pending': 2}; 22 congeladas; 0 con error
 2026-11-24 04:49:28,709 [INFO] Script 5: hitos.md actualizado; Vicente Luz: 148 señales; Gravity Zone: 2 señales
+2026-11-24 15:04:21,194 [INFO] Script 0: lista de simbolos al dia; sin descarga
+2026-11-24 15:04:22,059 [WARNING] No pude resolver 'alertas_bolsa_vicente_luz' (ValueError); busco por titulo en tus dialogos
+2026-11-24 15:04:22,284 [INFO] Canal encontrado por titulo: Alertas de Bolsa de Valores Vicente Luz
+2026-11-24 15:04:23,342 [INFO] Script 1: 17 mensajes nuevos, 0 señales validas (0 descartadas)
+2026-11-24 15:04:25,716 [INFO] Script 2: 0 alertas nuevas; fallidos: ninguno
+2026-11-24 15:04:38,528 [INFO] Script 3 (todos): 74 tickers, 1554 velas nuevas; fallidos: ninguno
+2026-11-24 15:04:39,919 [INFO] Script 4: 150 operaciones {'closed': 138, 'open': 12}; 27 congeladas; 0 con error
+2026-11-24 15:04:40,047 [INFO] Script 5: hitos.md actualizado; Vicente Luz: 148 señales; Gravity Zone: 2 señales
