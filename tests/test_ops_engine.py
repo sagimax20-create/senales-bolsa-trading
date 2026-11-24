@@ -102,6 +102,36 @@ class ShadowTest(unittest.TestCase):
         self.assertNotIn("ret_sin_reglas_pct", op)
 
 
+class ProfitLevelsTest(unittest.TestCase):
+    """v3: primer momento en que la prima llega a +25/+50/+75/+100% y precio del subyacente."""
+
+    PATH = [FLAT, (100, 104, 100, 103.5), (103.5, 109, 103.5, 108), (108, 112, 108, 111.5), (111.5, 116, 111, 115)]
+
+    def test_levels_recorded_with_spot_and_after_take_profit(self):
+        op = evaluate(cand(), bars(self.PATH), [], CFG, T0 + timedelta(hours=6))
+        self.assertEqual(op["reason_exit"], "take_profit")          # la regla oficial no cambia
+        for lv in (25, 50, 75, 100):
+            self.assertTrue(op[f"nivel_{lv}_ts"], lv)
+        ts = [op[f"nivel_{lv}_ts"] for lv in (25, 50, 75, 100)]
+        self.assertEqual(ts, sorted(ts))
+        self.assertGreaterEqual(op["nivel_100_spot"], op["nivel_25_spot"])
+        self.assertEqual(op["spot_favorable_45d"], 116)
+
+    def test_level_not_reached_is_blank(self):
+        op = evaluate(cand(), bars([FLAT, (100, 100.5, 99.5, 100)]), [], CFG, T0 + timedelta(hours=3))
+        self.assertEqual([op[f"nivel_{lv}_ts"] for lv in (25, 50, 75, 100)], ["", "", "", ""])
+
+    def test_put_levels_use_the_low(self):
+        op = evaluate(cand(typ="PUT"), bars([FLAT, (100, 100, 91, 92)]), [], CFG, T0 + timedelta(hours=3))
+        self.assertEqual(op["nivel_25_spot"], 91)
+        self.assertEqual(op["spot_favorable_45d"], 91)
+
+    def test_vicente_strike_is_kept(self):
+        c = cand()
+        c["strike_vl"] = "105"
+        self.assertEqual(evaluate(c, bars([FLAT, FLAT]), [], CFG, T0 + timedelta(hours=3))["strike_vl"], "105")
+
+
 class CandidatesTest(unittest.TestCase):
     def test_only_valid_signals_and_gravity_on_original_tickers(self):
         signals = [

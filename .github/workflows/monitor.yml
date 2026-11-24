@@ -73,6 +73,14 @@ jobs:
           ALERT_EMAIL_TO: ${{ secrets.ALERT_EMAIL_TO }}
         run: python scripts/5_generate_reports.py
 
+      # Avisos al bot de Telegram (+25/+50/+75/+100%). Sin estos Secrets no hace nada.
+      - name: 6 - Telegram bot alerts
+        if: ${{ !cancelled() }}
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python scripts/8_notify_telegram.py
+
       - name: Commit & push changes
         if: ${{ !cancelled() }}
         run: |

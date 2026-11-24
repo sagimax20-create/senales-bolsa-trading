@@ -52,7 +52,21 @@ En GitHub, ir a Actions → "Signal Monitor" → Run workflow y marcar `reproces
 
 Van como Secrets de GitHub, nunca en el repo:
 
-- `TELEGRAM_API_ID`, `TELEGRAM_API_HASH` y `TELEGRAM_SESSION` (ver `scripts/0_make_session.py`).
-- `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS` y `ALERT_EMAIL_TO`.
+- **Lectura del canal:** `TELEGRAM_API_ID`, `TELEGRAM_API_HASH` y `TELEGRAM_SESSION` (ver `scripts/0_make_session.py`).
+- **Correo:** `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS` y `ALERT_EMAIL_TO`.
+- **Bot de avisos (opcional):** `TELEGRAM_BOT_TOKEN` y `TELEGRAM_CHAT_ID`.
 
-El log enmascara cualquier dirección de correo.
+El log enmascara cualquier dirección de correo y nunca escribe el token del bot.
+
+## Bot de Telegram: avisos de +25%, +50%, +75% y +100%
+
+`scripts/8_notify_telegram.py` avisa cuando una operación en papel llega a cada nivel de ganancia de la prima. El aviso incluye el precio del subyacente en ese momento y su distancia al strike del protocolo y al strike de Vicente. La regla oficial no cambia: se cierra en +50%, y los niveles posteriores se marcan "en sombra".
+
+Para activarlo:
+
+1. En Telegram, abre **@BotFather**, envía `/newbot`, elige nombre y usuario, y copia el **token** que te da. No lo pegues en ningún chat ni archivo.
+2. Envíale cualquier mensaje a tu bot (por ejemplo `/start`).
+3. Busca tu **chat id**. Abre en el navegador `https://api.telegram.org/bot<TOKEN>/getUpdates`, con tu token en lugar de `<TOKEN>`, y copia el número de `"chat":{"id": ...}`.
+4. En GitHub, ve a Settings → Secrets and variables → Actions → New repository secret, y crea `TELEGRAM_BOT_TOKEN` (el token) y `TELEGRAM_CHAT_ID` (el número).
+
+En la siguiente corrida del monitor llega un mensaje de bienvenida. Desde ahí llegan solo los niveles nuevos; el histórico está en el reporte semanal.

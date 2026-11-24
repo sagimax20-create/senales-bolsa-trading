@@ -20,6 +20,7 @@ from datetime import date, datetime, timedelta
 from common_utils import (GRAVITY_COLS, GRAVITY_CSV, MESSAGES_COLS, MESSAGES_CSV, NY,
                           OPERATIONS_CSV, OPS_COLS, SIGNALS_COLS, SIGNALS_CSV, fmt_ts, load_csv,
                           now_utc, parse_ts, to_float)
+from ops_engine import PROFIT_LEVELS
 
 CHANNELS = [("VICENTE_LUZ", "Vicente Luz"), ("GRAVITY_ZONE", "Gravity Zone")]
 
@@ -338,6 +339,97 @@ def nota2_html(data: dict, cfg: dict) -> str:
             "con seguimiento completo hasta el día 45: cuántas habrían tocado +100%, +150% o +200%. No cambia "
             "el resultado oficial.</p>" + table(["Canal", "Take-profit con 45 días vistos", "Tocó +100%",
                                                   "Tocó +150%", "Tocó +200%"], rows))
+
+
+# --------------------------------------------------------------------------- niveles de ganancia
+def strike_distance(option_type: str, spot, strike) -> float | None:
+    """% del subyacente respecto del strike en la direccion de la operacion:
+    >= 0 = ya paso el strike (en el dinero); < 0 = le faltaba ese % para llegar."""
+    s, k = to_float(spot), to_float(strike)
+    if not s or not k:
+        return None
+    return ((s - k) / k if option_type == "CALL" else (k - s) / k) * 100
+
+
+def distance_label(d: float | None, near: float) -> str:
+    if d is None:
+        return "sin dato"
+    if d >= 0:
+        return "pasó el strike"
+    return f"a menos de {near:g}% del strike" if d >= -near else f"a más de {near:g}% del strike"
+
+
+def _event_status(o: dict, lv: int, ts: str) -> str:
+    if o["estado"] != "closed":
+        return "operación abierta"
+    ex, reason = o.get("timestamp_exit") or "", o.get("reason_exit")
+    if ts > ex or (ts == ex and reason == "take_profit" and lv > 50):
+        label = {"take_profit": "take-profit", "stop_loss": "stop-loss", "expiry": "vencimiento"}.get(reason, reason)
+        return f"en sombra: la operación ya había cerrado por {label}"
+    if reason == "take_profit" and lv == 50:
+        return "cierre oficial por take-profit (+50%)"
+    return "antes del cierre"
+
+
+def level_events(ops: list[dict]) -> list[dict]:
+    """Un evento por operacion y nivel (+25/+50/+75/+100%) alcanzado por la prima."""
+    out = []
+    for o in ops:
+        if o["estado"] not in ("open", "closed") or not o.get("timestamp_entry"):
+            continue
+        for lv in PROFIT_LEVELS:
+            ts = o.get(f"nivel_{lv}_ts")
+            if not ts:
+                continue
+            spot = to_float(o.get(f"nivel_{lv}_spot"))
+            out.append({"op": o, "nivel": lv, "ts": ts, "spot": spot,
+                        "dist_prot": strike_distance(o["option_type"], spot, o.get("strike_usd")),
+                        "dist_vl": strike_distance(o["option_type"], spot, o.get("strike_vl")),
+                        "dias": (parse_ts(ts) - parse_ts(o["timestamp_entry"])).total_seconds() / 86400,
+                        "estado": _event_status(o, lv, ts)})
+    return sorted(out, key=lambda e: (e["ts"], int(e["op"]["id"]), e["nivel"]))
+
+
+def _pctcell(x) -> str:
+    return "sin dato" if x is None else f"{x:+.1f}%"
+
+
+def levels_html(data: dict, cfg: dict, a: str = "", b: str = "", period: str = "") -> str:
+    """Seccion de niveles: eventos del periodo [a, b) y resumen acumulado por nivel."""
+    near = float(cfg.get("strike_near_pct", 2))
+    ops = ops_of(data, "VICENTE_LUZ")
+    evs = level_events(ops)
+    with_entry = [o for o in ops if o["estado"] in ("open", "closed") and o.get("timestamp_entry")]
+    out = ["<p class='muted'>Ganancia de la prima (modelo) de cada operación en papel. La regla oficial sigue "
+           "siendo cerrar en +50%; +75% y +100% se miden en sombra (§10 nota 2). Distancia al strike = precio del "
+           f"subyacente en ese momento frente al strike: positiva si ya lo pasó; «cerca» = a menos de {near:g}%. "
+           "Strike del protocolo = spot de entrada ±5%; strike de Vicente = el publicado en la señal.</p>"]
+    if a or b:
+        rows = [[e["op"]["id"], e["op"]["ticker"], e["op"]["option_type"], f"+{e['nivel']}%", e["ts"][:16],
+                 f"{e['dias']:.1f}", e["spot"] if e["spot"] is not None else "sin dato",
+                 e["op"].get("strike_usd", ""), _pctcell(e["dist_prot"]), e["op"].get("strike_vl") or "sin dato",
+                 _pctcell(e["dist_vl"]), e["estado"]]
+                for e in evs if (not a or e["ts"] >= a) and (not b or e["ts"] < b)]
+        out.append(f"<h3>Niveles alcanzados {esc(period)}</h3>" + table(
+            ["#", "Ticker", "Tipo", "Nivel", "Momento (UTC)", "Días desde entrada", "Precio subyacente",
+             "Strike protocolo", "Distancia", "Strike Vicente", "Distancia", "Estado"], rows,
+            "Ninguna operación llegó a un nuevo nivel en este período."))
+    summ = []
+    for lv in PROFIT_LEVELS:
+        e_lv = [e for e in evs if e["nivel"] == lv]
+        cat = lambda key, f: sum(1 for e in e_lv if f(e[key]))  # noqa: E731
+        vl = [e for e in e_lv if e["dist_vl"] is not None]
+        summ.append([f"+{lv}%", len(e_lv),
+                     f"{len(e_lv) / len(with_entry) * 100:.0f}%" if with_entry else "sin dato",
+                     cat("dist_prot", lambda d: d is not None and d >= 0),
+                     cat("dist_prot", lambda d: d is not None and -near <= d < 0),
+                     cat("dist_prot", lambda d: d is not None and d < -near),
+                     f"{sum(e['dist_vl'] >= 0 for e in vl)} / {sum(-near <= e['dist_vl'] < 0 for e in vl)} / "
+                     f"{sum(e['dist_vl'] < -near for e in vl)}" if vl else "sin dato"])
+    out.append(f"<h3>Resumen acumulado ({len(with_entry)} operaciones con entrada)</h3>" + table(
+        ["Nivel", "Operaciones que llegaron", "% del total", "Pasó el strike del protocolo",
+         f"A menos de {near:g}%", f"Más lejos", "Strike de Vicente: pasó / cerca / lejos"], summ))
+    return "".join(out)
 
 
 def discard_rows(signals: list[dict]) -> list[list]:

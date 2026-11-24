@@ -33,9 +33,11 @@ def main() -> int:
     signals = load_csv(SIGNALS_CSV, SIGNALS_COLS)
     gravity = load_csv(GRAVITY_CSV, GRAVITY_COLS)
     existing = load_csv(OPERATIONS_CSV, OPS_COLS)
+    gz_hist = {o["signal_key"]: o for o in existing if o.get("channel") == "GRAVITY_ZONE"}
     if state.get("ops_version") != OPS_VERSION:
-        backup_once(OPERATIONS_CSV, f"operations_v1_{now:%Y%m%d}.csv")
-        log_event(f"Script 4: operaciones v1 respaldadas ({len(existing)}); reconstruyo desde cero")
+        old_v = state.get("ops_version", 1)
+        backup_once(OPERATIONS_CSV, f"operations_v{old_v}_{now:%Y%m%d}.csv")
+        log_event(f"Script 4: operaciones v{old_v} respaldadas ({len(existing)}); reconstruyo desde cero")
         existing = []
     by_key = {o["signal_key"]: o for o in existing if o.get("ops_version") == str(OPS_VERSION)}
     next_id = max([int(o["id"]) for o in by_key.values() if o.get("id")] or [0]) + 1
@@ -70,9 +72,13 @@ def main() -> int:
         op["id"] = oid
         ops.append(op)
     if not cfg.get("gravity_enabled", True):  # ADENDA-02: el historico de Gravity Zone se conserva tal cual
-        kept = {k: o for k, o in by_key.items() if o.get("channel") == "GRAVITY_ZONE"}
-        ops += kept.values()
-        by_key = {k: o for k, o in by_key.items() if k not in kept}
+        used = {int(o["id"]) for o in ops if o.get("id")}
+        for o in gz_hist.values():
+            if not o.get("id") or int(o["id"]) in used:
+                o["id"] = max(used | {0}) + 1   # no chocar con los numeros de Vicente Luz
+            used.add(int(o["id"]))
+            ops.append(o)
+        by_key = {k: o for k, o in by_key.items() if k not in gz_hist}
     if by_key:
         log_event(f"Script 4: {len(by_key)} operaciones sin señal valida (se quitan): "
                   f"{sorted(by_key)[:5]}", "WARNING")

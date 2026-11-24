@@ -79,7 +79,11 @@ OPS_COLS = ["id", "timestamp_entry", "ticker", "option_type", "strike_usd", "pri
             "signal_id", "message_id", "en_universo_original", "spot_exit", "bar_interval",
             # PROTOCOLO §10 nota 2: seguimiento en sombra hasta el dia 45 (no altera la regla)
             "peak_45d_pct", "trough_45d_pct", "toco_100", "toco_150", "toco_200",
-            "ret_sin_reglas_pct", "sombra_completa", "ops_version"]
+            "ret_sin_reglas_pct", "sombra_completa", "ops_version",
+            # v3: niveles de ganancia de la prima y precio del subyacente en ese momento
+            "strike_vl", "spot_favorable_45d",
+            "nivel_25_ts", "nivel_25_spot", "nivel_50_ts", "nivel_50_spot",
+            "nivel_75_ts", "nivel_75_spot", "nivel_100_ts", "nivel_100_spot"]
 
 DEFAULT_CONFIG = {
     "allowed_tickers": ["GDX", "NVDA", "MARA", "GLD", "INTC", "MSFT", "DIS", "FCX"],
@@ -99,6 +103,7 @@ DEFAULT_CONFIG = {
     "telegram_channel_title_hint": "Vicente Luz",
     "vicente_universe": "us_listed",
     "repost_window_days": 45,
+    "strike_near_pct": 2,
     "symbols_max_age_days": 7,
     "price_offhours_min_interval_hours": 4,
     "risk_free_rate": 0.045,
