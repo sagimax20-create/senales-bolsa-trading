@@ -163,6 +163,31 @@ class PricesTest(unittest.TestCase):
         self.assertEqual(got["FCX"], datetime(2026, 10, 5, 15, 0, tzinfo=timezone.utc))
 
 
+class SelectTickersTest(unittest.TestCase):
+    """Fuera de horario y con descarga reciente, igual se bajan los tickers sin velas
+    (en la corrida del 24-nov, 38 operaciones quedaron sin precio por esa pausa)."""
+
+    T = {"NVDA": datetime(2026, 11, 20, tzinfo=timezone.utc), "FCX": datetime(2026, 10, 5, tzinfo=timezone.utc)}
+    NIGHT = datetime(2026, 11, 24, 4, 45, tzinfo=timezone.utc)
+    DAY = datetime(2026, 11, 24, 16, 0, tzinfo=timezone.utc)
+
+    def test_market_open_fetches_all(self):
+        self.assertEqual(P3.select_tickers(self.T, self.DAY, "2026-11-24 15:50:00", CFG, False, lambda t: True),
+                         (self.T, "todos"))
+
+    def test_paused_off_hours_only_new_tickers(self):
+        sel, mode = P3.select_tickers(self.T, self.NIGHT, "2026-11-24 04:23:28", CFG, False, lambda t: t == "NVDA")
+        self.assertEqual((set(sel), mode), ({"FCX"}, "solo_sin_velas"))
+
+    def test_paused_when_everything_has_bars(self):
+        self.assertEqual(P3.select_tickers(self.T, self.NIGHT, "2026-11-24 04:23:28", CFG, False, lambda t: True),
+                         ({}, "pausa"))
+
+    def test_force_and_old_fetch(self):
+        self.assertEqual(P3.select_tickers(self.T, self.NIGHT, "2026-11-24 04:23:28", CFG, True, lambda t: True)[1], "todos")
+        self.assertEqual(P3.select_tickers(self.T, self.NIGHT, "2026-11-23 21:00:00", CFG, False, lambda t: True)[1], "todos")
+
+
 class SymbolsTest(unittest.TestCase):
     def test_parse_nasdaqtraded(self):
         text = ("Nasdaq Traded|Symbol|Security Name|Listing Exchange|Market Category|ETF|Round Lot Size|"
