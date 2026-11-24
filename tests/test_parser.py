@@ -298,17 +298,74 @@ class ParserV3Test(unittest.TestCase):
                           ("AT", "descartada", "palabra_en_minusculas")])
 
 
+class ParserV4Test(unittest.TestCase):
+    """v4: formatos que aparecieron en los mensajes reales (tests/fixtures/mensajes_reales.json)."""
+
+    def one(self, text, d=date(2026, 10, 20)):
+        return [(c.ticker, c.direction, c.strike, c.expiry, c.estado, c.motivo)
+                for c in parse_message(text, SYMBOLS, d)]
+
+    def test_day_before_month_and_two_digit_year(self):
+        self.assertEqual(self.one("$NVDA buy 23 OCT $225 Call @2.19")[0][3], "2026-10-23")
+        self.assertEqual(self.one("BUY XSP 9 NOV 2026 $727 Call", date(2026, 11, 6))[0][3], "2026-11-09")
+        self.assertEqual(self.one("Buy to Open: 23 OCT 26 28920 NDX Put", date(2026, 10, 23))[0][2:4],
+                         (28920.0, "2026-10-23"))
+
+    def test_ticker_inside_the_contract(self):
+        self.assertEqual(self.one("October 16 CVX $215 calls", date(2026, 10, 7)),
+                         [("CVX", "CALL", 215.0, "2026-10-16", "valida", "")])
+
+    def test_bull_put_credit_spread_is_a_call(self):
+        """Comprar el put menor y vender el mayor es alcista: la señal es CALL, no PUT."""
+        text = "Buy to Open: 23 OCT 26 28920 NDX Put\nSell to Open: 23 OCT 26 28930 NDX Put"
+        got = self.one(text, date(2026, 10, 23))
+        self.assertIn(("NDX", "CALL", 28920.0, "2026-10-23", "valida", ""), got)
+        self.assertIn(("NDX", "PUT", 28930.0, "2026-10-23", "descartada", "pierna_de_spread"), got)
+        c = [c for c in parse_message(text, SYMBOLS, date(2026, 10, 23)) if c.estado == "valida"][0]
+        self.assertEqual(c.spread, "PUT 28920/28930")
+
+    def test_bull_call_debit_spread_is_a_call_and_bear_put_debit_is_a_put(self):
+        self.assertEqual(valid("BUY XSP 9 NOV 2026 $727 Call\nSELL XSP 9 NOV 2026 $728 Call", date(2026, 11, 6)),
+                         [("XSP", "CALL")])
+        self.assertEqual(valid("Buy SPY Dec 650 puts\nSell SPY Dec 640 puts"), [("SPY", "PUT")])
+        self.assertEqual(valid("Buy SPY Dec 650 calls\nSell SPY Dec 640 calls"), [("SPY", "PUT")])
+
+    def test_lone_sell_to_open_is_not_a_signal(self):
+        self.assertEqual(parse("Sell to Open NVDA Dec 150 puts at 3.10"),
+                         [("NVDA", "PUT", "descartada", "venta_de_opciones")])
+
+    def test_xsp_and_spx_in_same_message_count_once(self):
+        text = "BUY XSP 9 NOV 2026 $727 Call\nBUY SPX 9 NOV 2026 $7270 Call"
+        self.assertEqual([(t, e, m) for t, _d, _s, _x, e, m in self.one(text, date(2026, 11, 6))],
+                         [("XSP", "valida", ""), ("SPX", "descartada", "mismo_subyacente")])
+
+    def test_audit_v1_put_row_of_a_bullish_spread(self):
+        cands = [{"ticker": "NDX", "signal_type": "CALL", "estado": "valida", "motivo": "", "signal_id": "VL-1-NDX-C"},
+                 {"ticker": "NDX", "signal_type": "PUT", "estado": "descartada", "motivo": "pierna_de_spread",
+                  "signal_id": "VL-1-NDX-P"}]
+        self.assertEqual(audit_v1_row({"ticker": "NDX", "signal_type": "PUT"}, "x NDX y", cands, SYMBOLS)[:2],
+                         ("descartada", "direccion_distinta"))
+
+
 class RealMessagesTest(unittest.TestCase):
-    """Mensajes reales del canal (tests/fixtures/mensajes_reales.json), cuando se agreguen."""
+    """Lineas de alerta reales del canal (tests/fixtures/mensajes_reales.json)."""
 
     def test_real_messages(self):
         cases = json.loads((ROOT / "tests" / "fixtures" / "mensajes_reales.json").read_text(encoding="utf-8"))
+        self.assertGreaterEqual(len(cases), 10)
         for case in cases:
-            with self.subTest(message_id=case["message_id"]):
-                d = date.fromisoformat(case["fecha"])
-                got = [{"ticker": c.ticker, "tipo": c.direction, "estado": c.estado}
-                       for c in parse_message(case["texto"], SYMBOLS, d) if c.estado == "valida"]
-                self.assertEqual(got, [e for e in case["esperado"] if e.get("estado", "valida") == "valida"])
+            with self.subTest(texto=case["texto"][:40]):
+                d = date.fromisoformat(case["fecha"]) if case["fecha"] else date(2026, 11, 24)
+                got = [c for c in parse_message(case["texto"], SYMBOLS, d) if c.estado == "valida"]
+                exp = [e for e in case["esperado"] if e.get("estado", "valida") == "valida"]
+                self.assertEqual([(c.ticker, c.direction) for c in got], [(e["ticker"], e["tipo"]) for e in exp])
+                for c, e in zip(got, exp):
+                    if "strike" in e:
+                        self.assertEqual(c.strike, float(e["strike"]))
+                    if "vencimiento" in e and case["fecha"]:
+                        self.assertEqual(c.expiry, e["vencimiento"])
+                    if "prima" in e:
+                        self.assertEqual(c.premium, float(e["prima"]))
 
 
 if __name__ == "__main__":

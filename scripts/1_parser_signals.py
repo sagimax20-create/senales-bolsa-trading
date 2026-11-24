@@ -102,7 +102,7 @@ def build_rows(messages: list[tuple[int, datetime, str]], symbols: set[str], cfg
                 "estado": c.estado, "motivo": c.motivo, "repite_a": "",
                 "strike_vl": "" if c.strike is None else f"{c.strike:g}", "expiry_vl": c.expiry,
                 "linea": str(c.line_no), "en_universo_original": "1" if c.ticker in allowed else "0",
-                "parser_version": str(PARSER_VERSION), "ticker_escrito": c.escrito,
+                "parser_version": str(PARSER_VERSION), "ticker_escrito": c.escrito, "spread": c.spread,
             })
         per_msg[mid] = rows
         sig_rows += rows

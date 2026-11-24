@@ -26,6 +26,12 @@ MOTIVOS = {
     "sin_estructura": "Ticker y dirección, pero sin strike, vencimiento ni prima",
     "cierre_o_venta": "Mensaje de cierre o venta, no de entrada",
     "direccion_ambigua": "CALL y PUT del mismo ticker en el mismo mensaje",
+    "pierna_de_spread": "Pierna vendida de un spread (la señal es la pierna comprada)",
+    "venta_de_opciones": "Venta de opciones sin compra (el protocolo solo compra)",
+    "mismo_subyacente": "Mismo subyacente que otra señal del mensaje (XSP = SPX / 10)",
+    "minusculas_strike_incoherente": "Ticker en minúsculas con strike incoherente con su precio",
+    "minusculas_sin_precio": "Ticker en minúsculas sin precio para verificarlo",
+    "minusculas_sin_strike": "Ticker en minúsculas sin strike para verificarlo",
 }
 SUPUESTOS = (
     "Supuestos del modelo: las primas son teóricas (Black-Scholes con volatilidad realizada de 20 días "

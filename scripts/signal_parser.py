@@ -20,7 +20,14 @@ ticker. Ninguna regla de esta version depende de una lista de palabras excluidas
 3. El ticker de la señal es el simbolo mas cercano ANTES del contrato (o justo despues:
    "calls on $NVDA"). En "Buy to open the KWEB Dec 40 calls" gana KWEB, no OPEN; en
    "TTWO DEC 260 CALLS AT 5.40", DEC es el vencimiento y AT marca la prima.
-4. Una linea de cierre o venta (sold, STC, took profits, vendi...) no abre señal.
+4. Una linea de cierre (sold, STC, to close, took profits, vendi...) no abre señal.
+   v4: spreads. Si el mensaje compra y vende el mismo tipo de opcion del mismo ticker
+   ("BUY XSP $727 Call / SELL XSP $728 Call", "Buy to Open 28920 NDX Put / Sell to Open 28930
+   NDX Put"), es UNA señal con la direccion del spread: comprar el strike menor y vender el
+   mayor es alcista (CALL); al reves, bajista (PUT). Asi un spread de credito con puts se
+   registra como CALL. La pierna vendida queda "pierna_de_spread"; una venta sola de opciones,
+   "venta_de_opciones" (el protocolo solo compra).
+   v4: XSP y SPX (mismo subyacente) en el mismo mensaje cuentan una sola vez.
 5. Mismo ticker con CALL y PUT en el mismo mensaje: direccion ambigua, se descarta.
 6. Reposteos: cuenta la primera aparicion de un contrato; las siguientes compatibles dentro
    de `repost_window_days` dias quedan "descartada / repeticion" con referencia a la primera.
@@ -29,10 +36,13 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime
 
-PARSER_VERSION = 3
+from common_utils import yahoo_symbol
+
+PARSER_VERSION = 4
 
 MONTHS = {
     # ingles
@@ -55,9 +65,11 @@ _PREMIUM_FILLERS = {"about", "around", "approx", "approximately", "aprox", "only
                     "below", "near", "the", "more", "than", "no", "up", "to", "de", "unos", "alrededor",
                     "of", "a", "max", "maximo", "máximo", "limit", "límite", "limite"}
 _EXIT_RE = re.compile(
-    r"\b(sold|selling|sell\s+to\s+(?:close|open)|to\s+close|stc|sto|closed|closing\s+out|trim(?:med|ming)?|"
+    r"\b(sold|selling|sell\s+to\s+close|to\s+close|stc|closed|closing\s+out|trim(?:med|ming)?|"
     r"took\s+(?:some\s+)?profits?|taking\s+(?:some\s+)?profits?|profits?\s+taken|exit(?:ed|ing)?|"
     r"stopped\s+out|vend[ií](?:mos)?|vendid[oa]s?|cerr[ée](?:mos)?|cerrad[oa]s?)\b", re.I)
+# Pierna vendida al abrir (spread o venta de opciones): "SELL XSP ... Call", "Sell to Open".
+_SELL_RE = re.compile(r"\b(sell|sto|short)\b", re.I)
 
 _TOKEN_RE = re.compile(r"""
     (?P<time>(?<![\d.])\d{1,2}:\d{2}(?![\d]))
@@ -178,6 +190,8 @@ class Candidate:
     estado: str = "valida"
     escrito: str = "mayusculas"   # mayusculas | cashtag | minusculas
     motivo: str = ""
+    accion: str = "compra"        # compra | venta (pierna vendida al abrir)
+    spread: str = ""              # "PUT 28920/28930" si la señal es un spread
 
 
 def _resolve_expiry(month: int, day: int | None, year: int | None, msg_date: date) -> str:
@@ -197,12 +211,19 @@ def _is_friday(month: int, day: int, msg_date: date) -> bool:
         return False
 
 
-def _expiry_near(toks: list[Tok], i: int, strike_idx: int | None, msg_date: date) -> tuple[str, int | None]:
-    """Vencimiento mas cercano al token de direccion `i` (ventana -5..+4 tokens)."""
+def _is_int(tok: Tok, lo: int, hi: int) -> bool:
+    return _is_plain_num(tok) and tok.value.is_integer() and lo <= tok.value <= hi
+
+
+def _expiry_near(toks: list[Tok], i: int, strike_idx: int | None,
+                 msg_date: date) -> tuple[str, int | None, set[int]]:
+    """Vencimiento mas cercano al token de direccion `i` (ventana -5..+4 tokens).
+    Devuelve (vencimiento, indice del mes o fecha, indices que forman el vencimiento)."""
     best = None
     for j in range(max(0, i - 5), min(len(toks), i + 5)):
         tok = toks[j]
         exp = None
+        used = {j}
         if tok.kind == "iso":
             y, mo, d = (int(x) for x in tok.text.split("-"))
             if 1 <= mo <= 12 and 1 <= d <= 31:
@@ -219,20 +240,28 @@ def _expiry_near(toks: list[Tok], i: int, strike_idx: int | None, msg_date: date
             mo = _month_of(toks, j)
             if mo is not None:
                 day = year = None
+                if j > 0 and j - 1 != strike_idx and _is_int(toks[j - 1], 1, 31):   # "23 OCT", "9 NOV 2026"
+                    day = int(toks[j - 1].value)
+                    used.add(j - 1)
                 k = j + 1
-                if k < len(toks) and _is_plain_num(toks[k]) and k != strike_idx and toks[k].value.is_integer():
+                if k < len(toks) and k != strike_idx and _is_int(toks[k], 1, 2031):
                     v = int(toks[k].value)
                     if 2025 <= v <= 2031:
-                        year, k = v, k + 1
-                    elif 1 <= v <= 31:
-                        day, k = v, k + 1
-                if year is None and k < len(toks) and _is_plain_num(toks[k]) and k != strike_idx \
-                        and toks[k].value.is_integer() and 2025 <= toks[k].value <= 2031:
+                        year = v
+                    elif day is not None and 25 <= v <= 31 and len(toks[k].text.lstrip("$")) == 2:
+                        year = 2000 + v   # "23 OCT 26": dia, mes, año
+                    elif day is None and 1 <= v <= 31:
+                        day = v
+                    if year is not None or day == v:
+                        used.add(k)
+                        k += 1
+                if year is None and k < len(toks) and k != strike_idx and _is_int(toks[k], 2025, 2031):
                     year = int(toks[k].value)
+                    used.add(k)
                 exp = _resolve_expiry(mo, day, year, msg_date)
         if exp and (best is None or abs(j - i) < abs(best[1] - i)):
-            best = (exp, j)
-    return (best[0], best[1]) if best else ("", None)
+            best = (exp, j, used)
+    return best if best else ("", None, set())
 
 
 def _premium_in(toks: list[Tok], from_idx: int = 0) -> float | None:
@@ -269,6 +298,7 @@ def parse_message(text: str, symbols: set[str], msg_date: date | None = None) ->
     raw: list[Candidate] = []
     for ln, toks in enumerate(tokd):
         exit_line = bool(_EXIT_RE.search(lines[ln]))
+        sell_line = not exit_line and bool(_SELL_RE.search(lines[ln]))
         line_ticker = None   # ticker del contrato anterior en la misma linea ("NVDA 200C, 210C")
         for i, tok in enumerate(toks):
             direction = _dir_of(tok)
@@ -291,17 +321,22 @@ def parse_message(text: str, symbols: set[str], msg_date: date | None = None) ->
                         strike, strike_idx = (toks[alt].value, alt) if alt is not None else (None, None)
             elif i > 1 and _is_plain_num(toks[i - 2]) and toks[i - 1].lower == "strike":
                 strike, strike_idx = toks[i - 2].value, i - 2
-            expiry, exp_idx = _expiry_near(toks, i, strike_idx, msg_date)
-            spec_start = min(x for x in (i, strike_idx, exp_idx) if x is not None)
-            used = {x for x in (strike_idx, exp_idx) if x is not None}
-            if exp_idx is not None and toks[exp_idx].kind == "word":
-                for k in (exp_idx + 1, exp_idx + 2):   # dia o año despues del mes
-                    if k < len(toks) and k != strike_idx and _is_plain_num(toks[k]):
-                        used.add(k)
-                    else:
-                        break
+            elif i > 1 and _is_plain_num(toks[i - 2]) and _month_of(toks, i - 1) is None \
+                    and _ticker_of(toks[i - 1], symbols, adjacent=True):
+                strike, strike_idx = toks[i - 2].value, i - 2   # "28920 NDX Put"
+            expiry, exp_idx, exp_used = _expiry_near(toks, i, strike_idx, msg_date)
+            used = exp_used | ({strike_idx} if strike_idx is not None else set())
+            spec_start = min(used | {i})
             ticker = None
+            for k in range(spec_start + 1, i):   # dentro del contrato: "October 16 CVX $215 calls"
+                if k in used or _month_of(toks, k) is not None:
+                    continue
+                ticker = _ticker_of(toks[k], symbols, adjacent=(k == i - 1 or k + 1 in used))
+                if ticker:
+                    break
             for k in range(spec_start - 1, max(-1, spec_start - 7), -1):
+                if ticker:
+                    break
                 if _dir_of(toks[k]):
                     ticker = line_ticker   # "NVDA Dec 200 calls and Dec 180 puts"
                     break
@@ -342,12 +377,15 @@ def parse_message(text: str, symbols: set[str], msg_date: date | None = None) ->
             if escrito == "mayusculas" and any(t.kind == "word" and t.text.startswith("$") and
                                                t.base.upper() == ticker for t in toks):
                 escrito = "cashtag"
-            cand = Candidate(ticker, direction, strike, expiry, premium, ln + 1, escrito=escrito)
+            cand = Candidate(ticker, direction, strike, expiry, premium, ln + 1, escrito=escrito,
+                             accion="venta" if sell_line else "compra")
             if exit_line:
                 cand.estado, cand.motivo = "descartada", "cierre_o_venta"
             elif strike is None and not expiry and premium is None:
                 cand.estado, cand.motivo = "descartada", "sin_estructura"
             raw.append(cand)
+    _apply_spreads(raw)
+    _same_underlying(raw)
     # una candidata por (ticker, direccion): gana la valida y, entre iguales, la primera
     best: dict[tuple[str, str], Candidate] = {}
     for c in raw:
@@ -364,6 +402,46 @@ def parse_message(text: str, symbols: set[str], msg_date: date | None = None) ->
         if c.estado == "valida" and len(valid_dirs[c.ticker]) > 1:
             c.estado, c.motivo = "descartada", "direccion_ambigua"
     return out
+
+
+def _apply_spreads(raw: list[Candidate]) -> None:
+    """Piernas compradas y vendidas del mismo ticker y tipo en un mensaje = un spread."""
+    groups: dict[tuple[str, str], list[Candidate]] = defaultdict(list)
+    for c in raw:
+        if c.motivo != "cierre_o_venta":
+            groups[(c.ticker, c.direction)].append(c)
+    for (_t, otype), cs in groups.items():
+        buys = [c for c in cs if c.accion == "compra"]
+        sells = [c for c in cs if c.accion == "venta"]
+        if sells and not buys:
+            for c in sells:
+                c.estado, c.motivo = "descartada", "venta_de_opciones"
+        elif sells:
+            b = next((c for c in buys if c.strike is not None), buys[0])
+            v = next((c for c in sells if c.strike is not None), sells[0])
+            view = otype
+            if b.strike is not None and v.strike is not None and b.strike != v.strike:
+                view = "CALL" if b.strike < v.strike else "PUT"   # compra menor/vende mayor: alcista
+                spread = f"{otype} {b.strike:g}/{v.strike:g}"
+            else:
+                spread = otype
+            for c in buys:
+                c.direction, c.spread = view, spread
+            for c in sells:
+                c.estado, c.motivo = "descartada", "pierna_de_spread"
+
+
+def _same_underlying(raw: list[Candidate]) -> None:
+    """XSP y SPX (mismo indice) en el mismo mensaje y misma direccion: una sola señal."""
+    first: dict[tuple[str, str], str] = {}
+    for c in raw:
+        if c.estado != "valida":
+            continue
+        key = (yahoo_symbol(c.ticker)[0], c.direction)
+        if key in first and first[key] != c.ticker:
+            c.estado, c.motivo = "descartada", "mismo_subyacente"
+        else:
+            first.setdefault(key, c.ticker)
 
 
 def message_motivo(text: str, cands: list[Candidate]) -> str:
@@ -436,11 +514,16 @@ def audit_v1_row(old: dict, text: str | None, cands: list[dict], symbols: set[st
     tok, typ = old["ticker"], old["signal_type"]
     if text is None:
         return "descartada", "mensaje_no_disponible", ""
-    for c in cands:
-        if c["ticker"] == tok and c["signal_type"] == typ:
-            sid = c["signal_id"] if c["estado"] == "valida" else ""
-            return c["estado"], c["motivo"] if c["estado"] != "valida" else "", sid
-    if any(c["ticker"] == tok for c in cands):
+    same = [c for c in cands if c["ticker"] == tok]
+    for c in same:
+        if c["signal_type"] == typ and c["estado"] == "valida":
+            return "valida", "", c["signal_id"]
+    if any(c["estado"] == "valida" for c in same):
+        return "descartada", "direccion_distinta", ""   # p. ej. spread de credito con puts = CALL
+    for c in same:
+        if c["signal_type"] == typ:
+            return c["estado"], c["motivo"], ""
+    if same:
         return "descartada", "direccion_distinta", ""
     if tok.lower() in MONTHS:
         return "descartada", "es_mes", ""

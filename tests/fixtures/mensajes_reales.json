@@ -1,1 +1,137 @@
-[]
+[
+  {
+    "message_id": null,
+    "fecha": "2026-10-05",
+    "texto": "Fcx 70 Jan 2028 calls 100 x play",
+    "esperado": [
+      {
+        "ticker": "FCX",
+        "tipo": "CALL",
+        "estado": "valida",
+        "strike": 70,
+        "vencimiento": "2028-01"
+      }
+    ]
+  },
+  {
+    "message_id": null,
+    "fecha": "2026-10-05",
+    "texto": "Buy, to open, the KWEB December 18$24 calls",
+    "esperado": [
+      {
+        "ticker": "KWEB",
+        "tipo": "CALL",
+        "estado": "valida",
+        "strike": 24,
+        "vencimiento": "2026-12-18"
+      }
+    ]
+  },
+  {
+    "message_id": null,
+    "fecha": "2026-10-05",
+    "texto": "buying the OSCR 01/15/2027 $40 calls for $3.50 - $4.00 per contract",
+    "esperado": [
+      {
+        "ticker": "OSCR",
+        "tipo": "CALL",
+        "estado": "valida",
+        "strike": 40,
+        "vencimiento": "2027-01-15",
+        "prima": 3.5
+      }
+    ]
+  },
+  {
+    "message_id": null,
+    "fecha": "2026-10-07",
+    "texto": "October 16 CVX $215 calls",
+    "esperado": [
+      {
+        "ticker": "CVX",
+        "tipo": "CALL",
+        "estado": "valida",
+        "strike": 215,
+        "vencimiento": "2026-10-16"
+      }
+    ]
+  },
+  {
+    "message_id": null,
+    "fecha": "2026-10-07",
+    "texto": "TSLA closes below $350 / Target 1: $212 / Target 2: $215 / Target 3: $217",
+    "esperado": []
+  },
+  {
+    "message_id": null,
+    "fecha": "2026-10-19",
+    "texto": "$NVDA buy 23 OCT $225 Call @2.19-2.24",
+    "esperado": [
+      {
+        "ticker": "NVDA",
+        "tipo": "CALL",
+        "estado": "valida",
+        "strike": 225,
+        "vencimiento": "2026-10-23",
+        "prima": 2.19
+      }
+    ]
+  },
+  {
+    "message_id": null,
+    "fecha": "2026-11-06",
+    "texto": "🟢 BUY XSP 9 NOV 2026 $727 Call\n🔴 SELL XSP 9 NOV 2026 $728 Call\n🟢 BUY SPX 9 NOV 2026 $7270 Call\n🔴 SELL SPX 9 NOV 2026 $7275 Call",
+    "esperado": [
+      {
+        "ticker": "XSP",
+        "tipo": "CALL",
+        "estado": "valida",
+        "strike": 727,
+        "vencimiento": "2026-11-09"
+      }
+    ]
+  },
+  {
+    "message_id": null,
+    "fecha": "2026-11-16",
+    "texto": "NvdL 20 march 19 calls at $5.25",
+    "esperado": [
+      {
+        "ticker": "NVDL",
+        "tipo": "CALL",
+        "estado": "valida",
+        "strike": 20,
+        "vencimiento": "2027-03-19",
+        "prima": 5.25
+      }
+    ]
+  },
+  {
+    "message_id": null,
+    "fecha": null,
+    "texto": "$IWM\nBuy 18 SEP $290 CALL @0.13",
+    "esperado": [
+      {
+        "ticker": "IWM",
+        "tipo": "CALL",
+        "estado": "valida",
+        "strike": 290,
+        "prima": 0.13
+      }
+    ]
+  },
+  {
+    "message_id": null,
+    "fecha": "2026-10-23",
+    "texto": "Ticker: NDX\nBuy to Open: 23 OCT 26 28920 NDX Put\nSell to Open: 23 OCT 26 28930 NDX Put",
+    "esperado": [
+      {
+        "ticker": "NDX",
+        "tipo": "CALL",
+        "estado": "valida",
+        "strike": 28920,
+        "vencimiento": "2026-10-23"
+      }
+    ]
+  }
+]
