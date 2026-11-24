@@ -575,3 +575,13 @@
 2026-11-24 04:23:51,630 [INFO] Script 4: operaciones v1 respaldadas (38); reconstruyo desde cero
 2026-11-24 04:23:52,531 [INFO] Script 4: 84 operaciones {'closed': 80, 'open': 4}; 0 congeladas; 0 con error
 2026-11-24 04:23:52,654 [INFO] Script 5: hitos.md actualizado; Vicente Luz: 82 señales; Gravity Zone: 2 señales
+2026-11-24 04:45:07,509 [INFO] Script 0: lista de simbolos al dia; sin descarga
+2026-11-24 04:45:08,240 [WARNING] No pude resolver 'alertas_bolsa_vicente_luz' (ValueError); busco por titulo en tus dialogos
+2026-11-24 04:45:08,487 [INFO] Canal encontrado por titulo: Alertas de Bolsa de Valores Vicente Luz
+2026-11-24 04:45:28,329 [INFO] Script 1: REPROCESADO parser v3: 1385 mensajes, 341 candidatas, 148 validas; 2402 filas v1 auditadas
+2026-11-24 04:45:28,543 [INFO] Script 2: mercado cerrado; sin alertas
+2026-11-24 04:45:28,622 [INFO] Script 3: mercado cerrado y descarga reciente; sin descarga
+2026-11-24 04:45:29,358 [WARNING] Script 4: 1 operaciones sin señal valida (se quitan): ['VICENTE_LUZ|VL-73396-TH-C']
+2026-11-24 04:45:29,527 [INFO] Script 4: 150 operaciones {'closed': 105, 'open': 7, 'sin_precio': 33, 'pending': 5}; 20 congeladas; 0 con error
+2026-11-24 04:45:31,950 [INFO] Correo enviado: Alarma alcanzada: Vicente Luz (100 señales)
+2026-11-24 04:45:31,951 [INFO] Script 5: hitos.md actualizado; Vicente Luz: 148 señales; Gravity Zone: 2 señales
