@@ -11,9 +11,9 @@ _Actualizado: 2026-11-24 UTC · generado por scripts/5_generate_reports.py · hi
 - Operaciones: 141 cerradas · 12 abiertas · 0 pendientes · 0 sin precio
 
 ## Gravity Zone
-- Señales válidas: 2
-- Alarma (100): EN PROGRESO (2/100) · fecha estimada: sin dato (pocas señales para proyectar)
-  - Retorno neto sin costo bancario: -56.9% · Acción: Seguir capturando.
-- Decisión final (300): PENDIENTE (2/300) · fecha estimada: sin dato (pocas señales para proyectar)
-  - Retorno neto con costo bancario (criterio §6): -64.3% · Acción: Si el retorno neto con costo bancario es < 10%, se rechaza.
-- Operaciones: 2 cerradas · 0 abiertas · 0 pendientes · 0 sin precio
+- Señales válidas: 3
+- Alarma (100): EN PROGRESO (3/100) · fecha estimada: sin dato (pocas señales para proyectar)
+  - Retorno neto sin costo bancario: -51.5% · Acción: Seguir capturando.
+- Decisión final (300): PENDIENTE (3/300) · fecha estimada: sin dato (pocas señales para proyectar)
+  - Retorno neto con costo bancario (criterio §6): -59.8% · Acción: Si el retorno neto con costo bancario es < 10%, se rechaza.
+- Operaciones: 3 cerradas · 0 abiertas · 0 pendientes · 0 sin precio

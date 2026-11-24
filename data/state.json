@@ -1,10 +1,12 @@
 {
+  "gravity_evaluated_until": "2026-11-23",
+  "gravity_version": 2,
   "hitos_notified": [
     "VICENTE_LUZ:alarma"
   ],
   "ops_version": 2,
   "parser_version": 4,
-  "prices_last_fetch": "2026-11-24 15:19:13",
+  "prices_last_fetch": "2026-11-24 15:47:24",
   "reprocess_stats": {
     "candidatas": 351,
     "correos_enmascarados_log": 0,
