@@ -14,6 +14,7 @@ W6 = load_script("6_generate_weekly_report")
 M7 = load_script("7_generate_monthly_report")
 P3 = load_script("3_fetch_prices")
 S0 = load_script("0_update_symbols")
+G2 = load_script("2_gravity_alerts")
 
 
 def op(i, ts_entry, ts_exit, reason, net, channel="VICENTE_LUZ", estado="closed", original="0", ticker="NVDA"):
@@ -186,6 +187,51 @@ class SelectTickersTest(unittest.TestCase):
     def test_force_and_old_fetch(self):
         self.assertEqual(P3.select_tickers(self.T, self.NIGHT, "2026-11-24 04:23:28", CFG, True, lambda t: True)[1], "todos")
         self.assertEqual(P3.select_tickers(self.T, self.NIGHT, "2026-11-23 21:00:00", CFG, False, lambda t: True)[1], "todos")
+
+
+class GravityTest(unittest.TestCase):
+    """Gravity Zone (aproximacion) evaluada al cierre de cada dia habil."""
+
+    def test_last_closed_day(self):
+        f = G2.last_closed_day
+        self.assertEqual(f(datetime(2026, 11, 24, 15, 0, tzinfo=timezone.utc)), date(2026, 11, 23))  # 10:00 NY
+        self.assertEqual(f(datetime(2026, 11, 24, 22, 0, tzinfo=timezone.utc)), date(2026, 11, 24))  # 17:00 NY
+        self.assertEqual(f(datetime(2026, 11, 26, 22, 0, tzinfo=timezone.utc)), date(2026, 11, 25))  # Thanksgiving
+        self.assertEqual(f(datetime(2026, 11, 28, 15, 0, tzinfo=timezone.utc)), date(2026, 11, 27))  # sabado
+
+    def test_close_timestamp_handles_dst(self):
+        self.assertEqual(G2.close_timestamp(date(2026, 10, 22)), "2026-10-22 20:00:00")  # EDT
+        self.assertEqual(G2.close_timestamp(date(2026, 11, 24)), "2026-11-24 21:00:00")  # EST
+
+    def rows(self, last_close, last_high, last_low):
+        out, d = [], date(2026, 9, 1)
+        closes = [100 + (i % 3) * 0.5 for i in range(30)]
+        for c in closes:
+            while not G2.is_trading_day(d):
+                d += timedelta(days=1)
+            out.append({"date": d.isoformat(), "open": c, "high": c + 0.3, "low": c - 0.3, "close": c})
+            d += timedelta(days=1)
+        while not G2.is_trading_day(d):
+            d += timedelta(days=1)
+        out.append({"date": d.isoformat(), "open": last_close, "high": last_high, "low": last_low, "close": last_close})
+        return out, d
+
+    def test_call_on_oversold_quiet_day(self):
+        rows, d = self.rows(97.0, 97.5, 96.8)       # z muy negativo, rango ~0.7%
+        got = G2.daily_alerts("GLD", rows, CFG, d, d)
+        self.assertEqual([(a["signal_type"], a["timestamp"]) for a in got], [("CALL", G2.close_timestamp(d))])
+
+    def test_no_call_when_range_is_wide(self):
+        rows, d = self.rows(97.0, 100.5, 96.0)      # mismo z, rango ~4.7%
+        self.assertEqual(G2.daily_alerts("GLD", rows, CFG, d, d), [])
+
+    def test_put_on_overbought_wide_day(self):
+        rows, d = self.rows(104.0, 104.5, 100.2)    # z muy positivo, rango ~4.3%
+        self.assertEqual([a["signal_type"] for a in G2.daily_alerts("GLD", rows, CFG, d, d)], ["PUT"])
+
+    def test_only_days_in_range(self):
+        rows, d = self.rows(97.0, 97.5, 96.8)
+        self.assertEqual(G2.daily_alerts("GLD", rows, CFG, d + timedelta(days=1), d + timedelta(days=5)), [])
 
 
 class SymbolsTest(unittest.TestCase):
