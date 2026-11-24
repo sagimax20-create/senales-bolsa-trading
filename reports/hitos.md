@@ -5,10 +5,10 @@ _Actualizado: 2026-11-24 UTC · generado por scripts/5_generate_reports.py · hi
 ## Vicente Luz
 - Señales válidas: 148
 - Alarma (100): ALCANZADA (148/100) · fecha estimada: alcanzado
-  - Retorno neto sin costo bancario: -15.9% · Acción: REVISAR PROTOCOLO: retorno sin costo bancario < 5%.
+  - Retorno neto sin costo bancario: -14.4% · Acción: REVISAR PROTOCOLO: retorno sin costo bancario < 5%.
 - Decisión final (300): PENDIENTE (148/300) · fecha estimada: 2027-01-14 (proyección al ritmo actual: 20.9 por semana)
-  - Retorno neto con costo bancario (criterio §6): -30.4% · Acción: Si el retorno neto con costo bancario es < 10%, se rechaza.
-- Operaciones: 103 cerradas · 7 abiertas · 5 pendientes · 33 sin precio
+  - Retorno neto con costo bancario (criterio §6): -29.1% · Acción: Si el retorno neto con costo bancario es < 10%, se rechaza.
+- Operaciones: 136 cerradas · 10 abiertas · 2 pendientes · 0 sin precio
 
 ## Gravity Zone
 - Señales válidas: 2
