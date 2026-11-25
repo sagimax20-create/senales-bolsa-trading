@@ -354,3 +354,5 @@ timestamp,ticker,signal_type,option_type,strike_type,price_recommended,channel,m
 2026-11-24 20:15:37,AMZN,CALL,OTM,95%,,VICENTE_LUZ,74272,VL-74272-AMZN-C,descartada,repeticion,VL-74214-AMZN-C,280,2026-12-04,1,0,4,minusculas,
 2026-11-24 20:28:13,NOW,CALL,OTM,95%,,VICENTE_LUZ,74275,VL-74275-NOW-C,descartada,sin_estructura,,,,1,0,4,cashtag,
 2026-11-24 20:48:42,META,CALL,OTM,95%,8.65,VICENTE_LUZ,74277,VL-74277-META-C,valida,,,615,2026-12-04,1,0,4,minusculas,
+2026-11-25 14:28:28,SPY,CALL,OTM,95%,,VICENTE_LUZ,74284,VL-74284-SPY-C,descartada,direccion_ambigua,,709,2026-11-25,2,0,4,mayusculas,
+2026-11-25 14:28:28,SPY,PUT,OTM,95%,,VICENTE_LUZ,74284,VL-74284-SPY-P,descartada,direccion_ambigua,,700,2026-11-25,8,0,4,mayusculas,

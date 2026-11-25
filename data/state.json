@@ -245,6 +245,8 @@
     "VICENTE_LUZ|VL-73895-NDX-P|75",
     "VICENTE_LUZ|VL-73932-CRK-C|25",
     "VICENTE_LUZ|VL-73940-AVGO-C|25",
+    "VICENTE_LUZ|VL-74026-MCD-C|25",
+    "VICENTE_LUZ|VL-74034-MCD-C|25",
     "VICENTE_LUZ|VL-74040-USO-P|25",
     "VICENTE_LUZ|VL-74056-HOOD-C|25",
     "VICENTE_LUZ|VL-74056-HOOD-C|50",
@@ -257,11 +259,14 @@
     "VICENTE_LUZ|VL-74186-TQQQ-C|25",
     "VICENTE_LUZ|VL-74186-TQQQ-C|50",
     "VICENTE_LUZ|VL-74186-TQQQ-C|75",
-    "VICENTE_LUZ|VL-74239-XRT-C|25"
+    "VICENTE_LUZ|VL-74239-XRT-C|25",
+    "VICENTE_LUZ|VL-74240-MCD-C|25",
+    "VICENTE_LUZ|VL-74240-MCD-C|50",
+    "VICENTE_LUZ|VL-74277-META-C|25"
   ],
   "ops_version": 4,
   "parser_version": 4,
-  "prices_last_fetch": "2026-11-25 06:19:54",
+  "prices_last_fetch": "2026-11-25 17:27:34",
   "reprocess_stats": {
     "candidatas": 351,
     "correos_enmascarados_log": 0,
@@ -272,7 +277,7 @@
   },
   "reprocessed_at": "2026-11-24 15:19:10",
   "symbols_updated_at": "2026-11-24 04:23:12",
-  "telegram_last_message_id": 74282,
+  "telegram_last_message_id": 74291,
   "vl_notified": [
     "VICENTE_LUZ|VL-72882-FCX-C|vl",
     "VICENTE_LUZ|VL-72887-MSFT-C|vl",
