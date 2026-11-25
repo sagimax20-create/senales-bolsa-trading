@@ -261,7 +261,7 @@
   ],
   "ops_version": 4,
   "parser_version": 4,
-  "prices_last_fetch": "2026-11-24 20:13:44",
+  "prices_last_fetch": "2026-11-25 06:19:54",
   "reprocess_stats": {
     "candidatas": 351,
     "correos_enmascarados_log": 0,
@@ -272,7 +272,7 @@
   },
   "reprocessed_at": "2026-11-24 15:19:10",
   "symbols_updated_at": "2026-11-24 04:23:12",
-  "telegram_last_message_id": 74281,
+  "telegram_last_message_id": 74282,
   "vl_notified": [
     "VICENTE_LUZ|VL-72882-FCX-C|vl",
     "VICENTE_LUZ|VL-72887-MSFT-C|vl",
@@ -320,6 +320,7 @@
     "VICENTE_LUZ|VL-74056-HOOD-C|vl",
     "VICENTE_LUZ|VL-74163-SPY-C|vl",
     "VICENTE_LUZ|VL-74186-TQQQ-C|vl",
-    "VICENTE_LUZ|VL-74236-IBIT-C|vl"
+    "VICENTE_LUZ|VL-74236-IBIT-C|vl",
+    "VICENTE_LUZ|VL-74239-XRT-C|vl"
   ]
 }
