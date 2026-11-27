@@ -369,3 +369,6 @@ timestamp,ticker,signal_type,option_type,strike_type,price_recommended,channel,m
 2026-11-25 22:22:06,IBIT,CALL,OTM,95%,0.44,VICENTE_LUZ,74318,VL-74318-IBIT-C,descartada,repeticion,VL-74314-IBIT-C,36,2026-12-04,1,0,4,cashtag,
 2026-11-25 23:57:33,SPY,CALL,OTM,95%,,VICENTE_LUZ,74321,VL-74321-SPY-C,valida,,,710,,3,0,4,cashtag,
 2026-11-25 23:59:15,SPY,CALL,OTM,95%,,VICENTE_LUZ,74323,VL-74323-SPY-C,descartada,repeticion,VL-74321-SPY-C,710,,1,0,4,cashtag,
+2026-11-27 14:30:43,SPY,CALL,OTM,95%,,VICENTE_LUZ,74351,VL-74351-SPY-C,descartada,direccion_ambigua,,730,2026-11-27,4,0,4,mayusculas,
+2026-11-27 14:30:43,SPY,PUT,OTM,95%,,VICENTE_LUZ,74351,VL-74351-SPY-P,descartada,direccion_ambigua,,722,2026-11-27,9,0,4,mayusculas,
+2026-11-27 17:09:39,AMZN,CALL,OTM,95%,,VICENTE_LUZ,74361,VL-74361-AMZN-C,valida,,,270,2026-12-04,1,0,4,minusculas,
