@@ -267,7 +267,7 @@
   ],
   "ops_version": 4,
   "parser_version": 4,
-  "prices_last_fetch": "2026-11-26 19:18:48",
+  "prices_last_fetch": "2026-11-27 02:18:43",
   "reprocess_stats": {
     "candidatas": 351,
     "correos_enmascarados_log": 0,
@@ -278,7 +278,7 @@
   },
   "reprocessed_at": "2026-11-24 15:19:10",
   "symbols_updated_at": "2026-11-24 04:23:12",
-  "telegram_last_message_id": 74338,
+  "telegram_last_message_id": 74343,
   "vl_notified": [
     "VICENTE_LUZ|VL-72882-FCX-C|vl",
     "VICENTE_LUZ|VL-72887-MSFT-C|vl",
