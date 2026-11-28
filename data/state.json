@@ -272,7 +272,7 @@
   ],
   "ops_version": 4,
   "parser_version": 4,
-  "prices_last_fetch": "2026-11-28 02:37:55",
+  "prices_last_fetch": "2026-11-28 10:57:05",
   "reprocess_stats": {
     "candidatas": 351,
     "correos_enmascarados_log": 0,
@@ -330,9 +330,13 @@
     "VICENTE_LUZ|VL-74040-USO-P|vl",
     "VICENTE_LUZ|VL-74056-HOOD-C|vl",
     "VICENTE_LUZ|VL-74163-SPY-C|vl",
+    "VICENTE_LUZ|VL-74174-BABA-C|vl",
     "VICENTE_LUZ|VL-74186-TQQQ-C|vl",
     "VICENTE_LUZ|VL-74236-IBIT-C|vl",
     "VICENTE_LUZ|VL-74239-XRT-C|vl",
-    "VICENTE_LUZ|VL-74240-MCD-C|vl"
+    "VICENTE_LUZ|VL-74240-MCD-C|vl",
+    "VICENTE_LUZ|VL-74277-META-C|vl",
+    "VICENTE_LUZ|VL-74310-SPY-C|vl",
+    "VICENTE_LUZ|VL-74313-IWM-C|vl"
   ]
 }
